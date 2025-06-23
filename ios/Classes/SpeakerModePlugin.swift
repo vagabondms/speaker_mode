@@ -220,39 +220,33 @@ public class SpeakerModePlugin: NSObject, FlutterPlugin {
     guard let eventSink = self.eventSink else { return }
     
     let isExternalConnected = isExternalDeviceConnected()
-    
-    // 외부 기기가 연결된 경우 스피커 모드를 강제로 비활성화
-    if isExternalConnected && isSpeakerModeOn {
-      do {
-        let session = AVAudioSession.sharedInstance()
-        
-        if isCallKitInUse() {
-          // CallKit이 활성화된 경우, 옵션만 변경
-          var options = session.categoryOptions
-          options.remove(.defaultToSpeaker)
-          try session.setCategory(session.category, mode: session.mode, options: options)
-        } else {
-          // CallKit이 비활성화된 경우, 기존 방식대로 처리
-          try session.setCategory(.playAndRecord, options: [
-            .allowBluetooth,
-            .allowBluetoothA2DP,
-            .allowAirPlay
-          ])
-          try session.setMode(.voiceChat)
-          try session.setActive(true)
-        }
-        
-        isSpeakerModeOn = false
-      } catch {
-        print("오디오 세션 업데이트 실패: \(error.localizedDescription)")
-      }
-    }
+    let actualSpeakerMode = getActualSpeakerModeState()
     
     // 이벤트 전송
     eventSink([
-      "isSpeakerOn": isSpeakerModeOn,
+      "isSpeakerOn": actualSpeakerMode,
       "isExternalDeviceConnected": isExternalConnected
     ])
+  }
+  
+  private func getActualSpeakerModeState() -> Bool {
+    let session = AVAudioSession.sharedInstance()
+    
+    // 1. 카테고리 옵션에서 .defaultToSpeaker 확인
+    if session.categoryOptions.contains(.defaultToSpeaker) {
+      return true
+    }
+    
+    // 2. 현재 출력 라우트 확인
+    let outputs = session.currentRoute.outputs
+    for output in outputs {
+      // 내장 스피커인지 확인
+      if output.portType == .builtInSpeaker {
+        return true
+      }
+    }
+    
+    return false
   }
 }
 

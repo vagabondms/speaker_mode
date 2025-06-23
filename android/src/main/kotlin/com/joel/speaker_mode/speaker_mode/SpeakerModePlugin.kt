@@ -7,6 +7,8 @@ import android.content.IntentFilter
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.NonNull
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -26,7 +28,6 @@ class SpeakerModePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHa
   private lateinit var eventChannel: EventChannel
   private lateinit var context: Context
   private lateinit var audioManager: AudioManager
-  private var isSpeakerModeOn: Boolean = false
   private var eventSink: EventChannel.EventSink? = null
   
   // 오디오 상태 변경 수신기
@@ -74,7 +75,7 @@ class SpeakerModePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHa
         setSpeakerMode(enabled, result)
       }
       "getSpeakerMode" -> {
-        result.success(isSpeakerModeOn)
+        result.success(getActualSpeakerModeState())
       }
       "isExternalDeviceConnected" -> {
         result.success(isExternalDeviceConnected())
@@ -99,11 +100,9 @@ class SpeakerModePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHa
       // 스피커폰 활성화/비활성화
       audioManager.isSpeakerphoneOn = enabled
       
-      // 상태 저장
-      isSpeakerModeOn = enabled
-      
-      // 상태 변경 이벤트 전송
-      sendAudioStateUpdate()
+      Handler(Looper.getMainLooper()).postDelayed({
+        sendAudioStateUpdate()
+      }, 200)
       
       result.success(true)
     } catch (e: Exception) {
@@ -133,19 +132,26 @@ class SpeakerModePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHa
     }
   }
   
+  // 현재 스피커 모드 상태를 AudioManager에서 직접 가져오는 함수
+  private fun getActualSpeakerModeState(): Boolean {
+    return audioManager.isSpeakerphoneOn
+  }
+
   // 현재 오디오 상태 이벤트 전송
   private fun sendAudioStateUpdate() {
     eventSink?.let { sink ->
       val isExternalConnected = isExternalDeviceConnected()
       
       // 외부 기기가 연결된 경우 스피커 모드를 강제로 비활성화
-      if (isExternalConnected && isSpeakerModeOn) {
+      if (isExternalConnected && audioManager.isSpeakerphoneOn) {
         audioManager.isSpeakerphoneOn = false
-        isSpeakerModeOn = false
       }
       
+      // 실제 AudioManager 상태를 사용
+      val actualSpeakerMode = getActualSpeakerModeState();
+      
       val audioState = HashMap<String, Any>()
-      audioState["isSpeakerOn"] = isSpeakerModeOn
+      audioState["isSpeakerOn"] = actualSpeakerMode
       audioState["isExternalDeviceConnected"] = isExternalConnected
       
       sink.success(audioState)
