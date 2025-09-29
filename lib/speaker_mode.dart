@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart';
+
 import 'speaker_mode_platform_interface.dart';
 
 /// 오디오 상태 정보를 담는 클래스
+@immutable
 class AudioState {
   /// 스피커 모드 활성화 여부
   final bool isSpeakerOn;
@@ -8,7 +11,7 @@ class AudioState {
   /// 외부 오디오 기기 연결 여부
   final bool isExternalDeviceConnected;
 
-  AudioState({
+  const AudioState({
     required this.isSpeakerOn,
     required this.isExternalDeviceConnected,
   });
@@ -22,7 +25,7 @@ class AudioState {
   }
 
   @override
-  int get hashCode => isSpeakerOn.hashCode ^ isExternalDeviceConnected.hashCode;
+  int get hashCode => Object.hash(isSpeakerOn, isExternalDeviceConnected);
 
   @override
   String toString() =>
