@@ -5,16 +5,12 @@ import AVKit
 
 private struct AudioDeviceInfo {
   let id: String
-  let name: String
   let type: String
-  let isConnected: Bool
 
   func toMap() -> [String: Any] {
     return [
       "id": id,
-      "name": name,
-      "type": type,
-      "isConnected": isConnected
+      "type": type
     ]
   }
 }
@@ -129,58 +125,42 @@ private final class SpeakerModeController: NSObject {
       if portType == .builtInSpeaker {
         selectedDeviceMap = AudioDeviceInfo(
           id: "builtin_speaker",
-          name: "스피커",
-          type: "builtinSpeaker",
-          isConnected: true
+          type: "builtinSpeaker"
         ).toMap()
       } else if portType == .builtInReceiver {
         selectedDeviceMap = AudioDeviceInfo(
           id: "builtin_receiver",
-          name: "리시버",
-          type: "builtinReceiver",
-          isConnected: true
+          type: "builtinReceiver"
         ).toMap()
       } else if portType == .bluetoothA2DP || portType == .bluetoothHFP || portType == .bluetoothLE {
         selectedDeviceMap = AudioDeviceInfo(
           id: currentOutput.uid,
-          name: currentOutput.portName,
-          type: "bluetooth",
-          isConnected: true
+          type: "bluetooth"
         ).toMap()
       } else if portType == .headphones {
         selectedDeviceMap = AudioDeviceInfo(
           id: currentOutput.uid,
-          name: currentOutput.portName,
-          type: "wiredHeadset",
-          isConnected: true
+          type: "wiredHeadset"
         ).toMap()
       } else if portType == .usbAudio {
         selectedDeviceMap = AudioDeviceInfo(
           id: currentOutput.uid,
-          name: currentOutput.portName,
-          type: "usb",
-          isConnected: true
+          type: "usb"
         ).toMap()
       } else if portType == .carAudio {
         selectedDeviceMap = AudioDeviceInfo(
           id: currentOutput.uid,
-          name: currentOutput.portName,
-          type: "carAudio",
-          isConnected: true
+          type: "carAudio"
         ).toMap()
       } else if portType == .airPlay {
         selectedDeviceMap = AudioDeviceInfo(
           id: currentOutput.uid,
-          name: currentOutput.portName,
-          type: "airplay",
-          isConnected: true
+          type: "airplay"
         ).toMap()
       } else {
         selectedDeviceMap = AudioDeviceInfo(
           id: currentOutput.uid,
-          name: currentOutput.portName,
-          type: "unknown",
-          isConnected: true
+          type: "unknown"
         ).toMap()
       }
     }

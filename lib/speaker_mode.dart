@@ -1,5 +1,9 @@
-import 'package:flutter/foundation.dart';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+import 'audio_device_picker_dialog.dart';
 import 'audio_source.dart';
 import 'speaker_mode_platform_interface.dart';
 
@@ -48,9 +52,44 @@ class AudioState {
 }
 
 class SpeakerMode {
-  /// Native audio route picker 표시
-  Future<void> showAudioRoutePicker() {
-    return SpeakerModePlatform.instance.showAudioRoutePicker();
+  /// Audio route picker 표시
+  /// iOS: Native AVRoutePickerView
+  /// Android: Material 3 Dialog
+  Future<void> showAudioRoutePicker(BuildContext context) async {
+    if (Platform.isIOS) {
+      // iOS: Native picker (context 무시)
+      await SpeakerModePlatform.instance.showAudioRoutePicker();
+    } else if (Platform.isAndroid) {
+      // Android: Material 3 Dialog
+      if (!context.mounted) return;
+
+      try {
+        final devices =
+            await SpeakerModePlatform.instance.getAvailableDevices();
+
+        // 현재 디바이스 가져오기
+        final currentDevice =
+            await SpeakerModePlatform.instance.getCurrentDevice();
+
+        if (!context.mounted) return;
+
+        final selected = await showDialog<AudioDevice>(
+          context: context,
+          barrierDismissible: true,
+          builder: (context) => AudioDevicePickerDialog(
+            devices: devices,
+            currentDevice: currentDevice,
+          ),
+        );
+
+        if (selected != null && context.mounted) {
+          await SpeakerModePlatform.instance.setAudioDevice(selected.id);
+        }
+      } catch (e) {
+        debugPrint('Failed to show audio route picker: $e');
+        rethrow;
+      }
+    }
   }
 
   /// 현재 선택된 오디오 디바이스 변경 스트림

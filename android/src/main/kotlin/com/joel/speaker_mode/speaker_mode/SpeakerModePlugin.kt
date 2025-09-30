@@ -26,8 +26,25 @@ class SpeakerModePlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamH
   override fun onMethodCall(call: MethodCall, result: Result) {
     when (call.method) {
       "showAudioRoutePicker" -> {
-        // TODO: Implement native audio route picker for Android
+        // Flutter에서 dialog 처리
         result.success(null)
+      }
+      "getAvailableDevices" -> {
+        val devices = SpeakerModeManager.getAvailableDevices()
+        result.success(devices.map { it.toMap() })
+      }
+      "setAudioDevice" -> {
+        val deviceId = call.argument<String>("deviceId")
+        if (deviceId != null) {
+          SpeakerModeManager.setAudioDevice(deviceId)
+          result.success(null)
+        } else {
+          result.error("INVALID_ARGUMENTS", "deviceId is required", null)
+        }
+      }
+      "getCurrentDevice" -> {
+        val device = SpeakerModeManager.getCurrentDevice()
+        result.success(device?.toMap())
       }
       else -> result.notImplemented()
     }

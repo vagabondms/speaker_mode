@@ -73,5 +73,44 @@ class MethodChannelSpeakerMode extends SpeakerModePlatform {
   }
 
   @override
+  Future<List<AudioDevice>> getAvailableDevices() async {
+    try {
+      final result = await methodChannel.invokeMethod<List>('getAvailableDevices');
+      if (result == null) return [];
+
+      return result
+          .map((data) => AudioDevice.fromMap(data as Map))
+          .toList();
+    } catch (e) {
+      debugPrint('getAvailableDevices error: $e');
+      return [];
+    }
+  }
+
+  @override
+  Future<void> setAudioDevice(String deviceId) async {
+    try {
+      await methodChannel.invokeMethod<void>(
+        'setAudioDevice',
+        {'deviceId': deviceId},
+      );
+    } catch (e) {
+      debugPrint('setAudioDevice error: $e');
+    }
+  }
+
+  @override
+  Future<AudioDevice?> getCurrentDevice() async {
+    try {
+      final result = await methodChannel.invokeMethod<Map>('getCurrentDevice');
+      if (result == null) return null;
+      return AudioDevice.fromMap(result);
+    } catch (e) {
+      debugPrint('getCurrentDevice error: $e');
+      return null;
+    }
+  }
+
+  @override
   Stream<AudioState> get audioStateStream => _audioStateStream;
 }

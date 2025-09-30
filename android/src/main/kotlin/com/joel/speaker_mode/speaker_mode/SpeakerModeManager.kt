@@ -13,16 +13,12 @@ import io.flutter.plugin.common.EventChannel
 
 internal data class AudioDeviceData(
   val id: String,
-  val name: String,
-  val type: String,
-  val isConnected: Boolean
+  val type: String
 ) {
   fun toMap(): Map<String, Any> {
     return mapOf(
       "id" to id,
-      "name" to name,
-      "type" to type,
-      "isConnected" to isConnected
+      "type" to type
     )
   }
 }
@@ -83,6 +79,47 @@ internal object SpeakerModeManager {
         initialized = false
       }
     }
+  }
+
+  fun getAvailableDevices(): List<AudioDeviceData> {
+    synchronized(lock) {
+      if (!initialized) {
+        return emptyList()
+      }
+    }
+    return getAvailableDevicesInternal()
+  }
+
+  fun getCurrentDevice(): AudioDeviceData? {
+    synchronized(lock) {
+      if (!initialized) {
+        return null
+      }
+      return getCurrentDeviceInternal()
+    }
+  }
+
+  fun setAudioDevice(deviceId: String) {
+    synchronized(lock) {
+      if (!initialized) {
+        return
+      }
+
+      when (deviceId) {
+        "builtin_speaker" -> {
+          audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+          audioManager.isSpeakerphoneOn = true
+        }
+        "builtin_receiver" -> {
+          audioManager.isSpeakerphoneOn = false
+        }
+        else -> {
+          // External device - Android handles automatically
+          audioManager.isSpeakerphoneOn = false
+        }
+      }
+    }
+    notifyAudioStateChanged()
   }
 
   fun addListener(sink: EventChannel.EventSink) {
@@ -164,6 +201,35 @@ internal object SpeakerModeManager {
     }
   }
 
+  private fun getAvailableDevicesInternal(): List<AudioDeviceData> {
+    val devices = mutableListOf<AudioDeviceData>()
+
+    // Always add built-in devices
+    devices.add(AudioDeviceData(id = "builtin_speaker", type = "builtinSpeaker"))
+    devices.add(AudioDeviceData(id = "builtin_receiver", type = "builtinReceiver"))
+
+    // Get all connected output devices
+    val outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+    for (device in outputDevices) {
+      when (device.type) {
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> {
+          devices.add(AudioDeviceData(id = device.id.toString(), type = "bluetooth"))
+        }
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+        AudioDeviceInfo.TYPE_WIRED_HEADSET -> {
+          devices.add(AudioDeviceData(id = device.id.toString(), type = "wiredHeadset"))
+        }
+        AudioDeviceInfo.TYPE_USB_HEADSET,
+        AudioDeviceInfo.TYPE_USB_DEVICE -> {
+          devices.add(AudioDeviceData(id = device.id.toString(), type = "usb"))
+        }
+      }
+    }
+
+    return devices
+  }
+
   private fun getCurrentDeviceInternal(): AudioDeviceData? {
     // Check if external device is connected
     val outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
@@ -173,27 +239,21 @@ internal object SpeakerModeManager {
         AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> {
           return AudioDeviceData(
             id = device.id.toString(),
-            name = device.productName?.toString() ?: "블루투스",
-            type = "bluetooth",
-            isConnected = true
+            type = "bluetooth"
           )
         }
         AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
         AudioDeviceInfo.TYPE_WIRED_HEADSET -> {
           return AudioDeviceData(
             id = device.id.toString(),
-            name = device.productName?.toString() ?: "유선 헤드셋",
-            type = "wiredHeadset",
-            isConnected = true
+            type = "wiredHeadset"
           )
         }
         AudioDeviceInfo.TYPE_USB_HEADSET,
         AudioDeviceInfo.TYPE_USB_DEVICE -> {
           return AudioDeviceData(
             id = device.id.toString(),
-            name = device.productName?.toString() ?: "USB 오디오",
-            type = "usb",
-            isConnected = true
+            type = "usb"
           )
         }
       }
@@ -203,16 +263,12 @@ internal object SpeakerModeManager {
     return if (audioManager.isSpeakerphoneOn) {
       AudioDeviceData(
         id = "builtin_speaker",
-        name = "스피커",
-        type = "builtinSpeaker",
-        isConnected = true
+        type = "builtinSpeaker"
       )
     } else {
       AudioDeviceData(
         id = "builtin_receiver",
-        name = "리시버",
-        type = "builtinReceiver",
-        isConnected = true
+        type = "builtinReceiver"
       )
     }
   }

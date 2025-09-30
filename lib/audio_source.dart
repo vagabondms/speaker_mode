@@ -77,29 +77,19 @@ class AudioDevice {
   /// 디바이스 고유 ID
   final String id;
 
-  /// 디바이스 이름
-  final String name;
-
   /// 디바이스 타입
   final AudioSourceType type;
 
-  /// 연결 상태
-  final bool isConnected;
-
   const AudioDevice({
     required this.id,
-    required this.name,
     required this.type,
-    required this.isConnected,
   });
 
   /// JSON Map에서 AudioDevice 생성
   factory AudioDevice.fromMap(Map<dynamic, dynamic> map) {
     return AudioDevice(
       id: map['id'] as String? ?? '',
-      name: map['name'] as String? ?? 'Unknown',
       type: AudioSourceType.fromString(map['type'] as String? ?? 'unknown'),
-      isConnected: map['isConnected'] as bool? ?? false,
     );
   }
 
@@ -107,9 +97,7 @@ class AudioDevice {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'name': name,
       'type': type.toJsonString(),
-      'isConnected': isConnected,
     };
   }
 
@@ -118,30 +106,23 @@ class AudioDevice {
     if (identical(this, other)) return true;
     return other is AudioDevice &&
         other.id == id &&
-        other.name == name &&
-        other.type == type &&
-        other.isConnected == isConnected;
+        other.type == type;
   }
 
   @override
-  int get hashCode => Object.hash(id, name, type, isConnected);
+  int get hashCode => Object.hash(id, type);
 
   @override
-  String toString() =>
-      'AudioDevice(id: $id, name: $name, type: $type, isConnected: $isConnected)';
+  String toString() => 'AudioDevice(id: $id, type: $type)';
 
   /// AudioDevice 복사본 생성
   AudioDevice copyWith({
     String? id,
-    String? name,
     AudioSourceType? type,
-    bool? isConnected,
   }) {
     return AudioDevice(
       id: id ?? this.id,
-      name: name ?? this.name,
       type: type ?? this.type,
-      isConnected: isConnected ?? this.isConnected,
     );
   }
 }
