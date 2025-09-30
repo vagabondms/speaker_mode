@@ -25,22 +25,6 @@ class SpeakerModePlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamH
 
   override fun onMethodCall(call: MethodCall, result: Result) {
     when (call.method) {
-      "setSpeakerMode" -> {
-        val enabled = call.argument<Boolean>("enabled")
-        if (enabled == null) {
-          result.error("INVALID_ARGUMENTS", "Arguments must contain 'enabled' boolean", null)
-          return
-        }
-
-        when (val managerResult = SpeakerModeManager.setSpeakerMode(enabled)) {
-          is SpeakerModeResult.Success -> result.success(managerResult.value)
-          is SpeakerModeResult.Error -> result.error(
-            managerResult.code,
-            managerResult.message,
-            null
-          )
-        }
-      }
       "setAudioDevice" -> {
         val deviceId = call.argument<String>("deviceId")
         if (deviceId == null) {
@@ -66,8 +50,6 @@ class SpeakerModePlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamH
         val device = SpeakerModeManager.getCurrentDevice()
         result.success(device?.toMap())
       }
-      "getSpeakerMode" -> result.success(SpeakerModeManager.getSpeakerMode())
-      "isExternalDeviceConnected" -> result.success(SpeakerModeManager.isExternalDeviceConnected())
       else -> result.notImplemented()
     }
   }

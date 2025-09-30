@@ -97,52 +97,6 @@ internal object SpeakerModeManager {
     }
   }
 
-  fun setSpeakerMode(enabled: Boolean): SpeakerModeResult {
-    synchronized(lock) {
-      if (!initialized) {
-        return SpeakerModeResult.Error(
-          code = "NOT_INITIALIZED",
-          message = "SpeakerModeManager is not initialized."
-        )
-      }
-
-      if (enabled && isExternalDeviceConnectedInternal()) {
-        return SpeakerModeResult.Error(
-          code = "EXTERNAL_DEVICE_CONNECTED",
-          message = "Cannot enable speaker mode when external audio device is connected"
-        )
-      }
-
-      return try {
-        applySpeakerStateInternal(enabled)
-        pendingSpeakerState = enabled
-        notifyAudioStateChanged(forceSpeakerState = enabled)
-        mainHandler.postDelayed({ notifyAudioStateChanged() }, 200)
-        SpeakerModeResult.Success(true)
-      } catch (e: Exception) {
-        SpeakerModeResult.Error(
-          code = "AUDIO_MANAGER_ERROR",
-          message = e.message
-        )
-      }
-    }
-  }
-
-  fun getSpeakerMode(): Boolean {
-    synchronized(lock) {
-      return if (initialized) audioManager.isSpeakerphoneOn else false
-    }
-  }
-
-  fun isExternalDeviceConnected(): Boolean {
-    synchronized(lock) {
-      if (!initialized) {
-        return false
-      }
-    }
-    return isExternalDeviceConnectedInternal()
-  }
-
   fun getAvailableDevices(): List<AudioDeviceData> {
     synchronized(lock) {
       if (!initialized) {
@@ -316,8 +270,6 @@ internal object SpeakerModeManager {
       val selectedDevice = determineSelectedDevice(availableDevices, speakerState, isExternalConnected)
 
       val state = mapOf(
-        "isSpeakerOn" to speakerState,
-        "isExternalDeviceConnected" to isExternalConnected,
         "availableDevices" to availableDevicesMaps,
         "selectedDevice" to selectedDevice?.toMap()
       )

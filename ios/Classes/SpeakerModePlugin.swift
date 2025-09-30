@@ -95,7 +95,7 @@ private final class SpeakerModeController: NSObject, CXCallObserverDelegate {
     sinks.removeValue(forKey: handle)
   }
 
-  func setSpeakerMode(enabled: Bool) -> Result<Bool, SpeakerModeError> {
+  private func setSpeakerMode(enabled: Bool) -> Result<Bool, SpeakerModeError> {
     let session = AVAudioSession.sharedInstance()
     let shouldUseBuiltInSpeaker = enabled
 
@@ -129,14 +129,6 @@ private final class SpeakerModeController: NSObject, CXCallObserverDelegate {
     } catch {
       return .failure(.audioSession(makeAudioSessionErrorMessage(from: error)))
     }
-  }
-
-  func currentSpeakerMode() -> Bool {
-    return getActualSpeakerModeState()
-  }
-
-  func isExternalDeviceConnected() -> Bool {
-    return currentOutputPorts().contains(where: externalPorts.contains)
   }
 
   func getAvailableDevices() -> [AudioDeviceInfo] {
@@ -374,9 +366,6 @@ private final class SpeakerModeController: NSObject, CXCallObserverDelegate {
     }
 
     let payload: [String: Any] = [
-      "isSpeakerOn": actualSpeakerMode,
-      "isExternalDeviceConnected": isExternalConnected,
-      "isCarAudioConnected": isCarAudioConnected,
       "availableDevices": availableDevicesMaps,
       "selectedDevice": selectedDeviceMap as Any
     ]
@@ -513,23 +502,6 @@ public class SpeakerModePlugin: NSObject, FlutterPlugin {
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
-    case "setSpeakerMode":
-      guard let args = call.arguments as? [String: Any],
-            let enabled = args["enabled"] as? Bool else {
-        result(FlutterError(
-          code: "INVALID_ARGUMENTS",
-          message: "Arguments must contain 'enabled' boolean",
-          details: nil
-        ))
-        return
-      }
-
-      switch controller.setSpeakerMode(enabled: enabled) {
-      case .success(let value):
-        result(value)
-      case .failure(let error):
-        result(error.flutterError)
-      }
     case "setAudioDevice":
       guard let args = call.arguments as? [String: Any],
             let deviceId = args["deviceId"] as? String else {
@@ -554,10 +526,6 @@ public class SpeakerModePlugin: NSObject, FlutterPlugin {
     case "getCurrentAudioDevice":
       let device = controller.getCurrentDevice()
       result(device?.toMap())
-    case "getSpeakerMode":
-      result(controller.currentSpeakerMode())
-    case "isExternalDeviceConnected":
-      result(controller.isExternalDeviceConnected())
     default:
       result(FlutterMethodNotImplemented)
     }

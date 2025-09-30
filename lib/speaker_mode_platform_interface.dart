@@ -25,11 +25,6 @@ abstract class SpeakerModePlatform extends PlatformInterface {
     _instance = instance;
   }
 
-  /// 스피커 모드 활성화/비활성화
-  Future<bool?> setSpeakerMode(bool enabled) {
-    throw UnimplementedError('setSpeakerMode() has not been implemented.');
-  }
-
   /// 특정 오디오 디바이스로 라우팅 설정
   Future<bool?> setAudioDevice(String deviceId) {
     throw UnimplementedError('setAudioDevice() has not been implemented.');
@@ -44,17 +39,6 @@ abstract class SpeakerModePlatform extends PlatformInterface {
   Future<AudioDevice?> getCurrentAudioDevice() {
     throw UnimplementedError(
         'getCurrentAudioDevice() has not been implemented.');
-  }
-
-  /// 현재 스피커 모드 상태 확인
-  Future<bool?> getSpeakerMode() {
-    throw UnimplementedError('getSpeakerMode() has not been implemented.');
-  }
-
-  /// 외부 오디오 기기(이어폰, 블루투스 등) 연결 상태 확인
-  Future<bool?> isExternalDeviceConnected() {
-    throw UnimplementedError(
-        'isExternalDeviceConnected() has not been implemented.');
   }
 
   /// 오디오 상태 변경 스트림

@@ -35,10 +35,6 @@ class MethodChannelSpeakerMode extends SpeakerModePlatform {
       return null;
     }
 
-    final isSpeakerOn = data['isSpeakerOn'] as bool? ?? false;
-    final isExternalDeviceConnected =
-        data['isExternalDeviceConnected'] as bool? ?? false;
-
     // Parse available devices
     final List<AudioDevice> availableDevices = [];
     if (data['availableDevices'] != null) {
@@ -62,8 +58,6 @@ class MethodChannelSpeakerMode extends SpeakerModePlatform {
     }
 
     return AudioState(
-      isSpeakerOn: isSpeakerOn,
-      isExternalDeviceConnected: isExternalDeviceConnected,
       availableDevices: availableDevices,
       selectedDevice: selectedDevice,
     );
@@ -73,18 +67,9 @@ class MethodChannelSpeakerMode extends SpeakerModePlatform {
     debugPrint('오디오 상태 스트림 에러: $error');
   }
 
-  Future<bool?> _invokeBool(String method, [Map<String, dynamic>? arguments]) {
-    return methodChannel.invokeMethod<bool>(method, arguments);
-  }
-
-  @override
-  Future<bool?> setSpeakerMode(bool enabled) async {
-    return _invokeBool('setSpeakerMode', {'enabled': enabled});
-  }
-
   @override
   Future<bool?> setAudioDevice(String deviceId) async {
-    return _invokeBool('setAudioDevice', {'deviceId': deviceId});
+    return methodChannel.invokeMethod<bool>('setAudioDevice', {'deviceId': deviceId});
   }
 
   @override
@@ -122,16 +107,6 @@ class MethodChannelSpeakerMode extends SpeakerModePlatform {
       debugPrint('getCurrentAudioDevice 에러: $e');
       return null;
     }
-  }
-
-  @override
-  Future<bool?> getSpeakerMode() async {
-    return _invokeBool('getSpeakerMode');
-  }
-
-  @override
-  Future<bool?> isExternalDeviceConnected() async {
-    return _invokeBool('isExternalDeviceConnected');
   }
 
   @override
