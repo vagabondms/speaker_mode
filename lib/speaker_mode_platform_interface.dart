@@ -25,20 +25,9 @@ abstract class SpeakerModePlatform extends PlatformInterface {
     _instance = instance;
   }
 
-  /// 특정 오디오 디바이스로 라우팅 설정
-  Future<bool?> setAudioDevice(String deviceId) {
-    throw UnimplementedError('setAudioDevice() has not been implemented.');
-  }
-
-  /// 사용 가능한 오디오 디바이스 목록 조회
-  Future<List<AudioDevice>> getAvailableDevices() {
-    throw UnimplementedError('getAvailableDevices() has not been implemented.');
-  }
-
-  /// 현재 선택된 오디오 디바이스 조회
-  Future<AudioDevice?> getCurrentAudioDevice() {
-    throw UnimplementedError(
-        'getCurrentAudioDevice() has not been implemented.');
+  /// Native audio route picker 표시
+  Future<void> showAudioRoutePicker() {
+    throw UnimplementedError('showAudioRoutePicker() has not been implemented.');
   }
 
   /// 오디오 상태 변경 스트림

@@ -48,29 +48,13 @@ class AudioState {
 }
 
 class SpeakerMode {
-  /// 특정 오디오 디바이스로 라우팅 설정
-  Future<bool?> setAudioDevice(String deviceId) {
-    return SpeakerModePlatform.instance.setAudioDevice(deviceId);
+  /// Native audio route picker 표시
+  Future<void> showAudioRoutePicker() {
+    return SpeakerModePlatform.instance.showAudioRoutePicker();
   }
 
-  /// 사용 가능한 오디오 디바이스 목록 조회
-  Future<List<AudioDevice>> getAvailableDevices() {
-    return SpeakerModePlatform.instance.getAvailableDevices();
-  }
-
-  /// 현재 오디오 상태 조회
-  Future<AudioState> getAudioState() async {
-    final availableDevices = await getAvailableDevices();
-    final selectedDevice =
-        await SpeakerModePlatform.instance.getCurrentAudioDevice();
-
-    return AudioState(
-      availableDevices: availableDevices,
-      selectedDevice: selectedDevice,
-    );
-  }
-
-  /// 오디오 상태 변경 스트림
-  Stream<AudioState> get audioStateStream =>
-      SpeakerModePlatform.instance.audioStateStream;
+  /// 현재 선택된 오디오 디바이스 변경 스트림
+  Stream<AudioDevice?> get currentDeviceStream =>
+      SpeakerModePlatform.instance.audioStateStream
+          .map((state) => state.selectedDevice);
 }
