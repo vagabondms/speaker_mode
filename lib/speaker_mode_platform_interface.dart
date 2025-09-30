@@ -37,8 +37,13 @@ abstract class SpeakerModePlatform extends PlatformInterface {
 
   /// 사용 가능한 오디오 디바이스 목록 조회
   Future<List<AudioDevice>> getAvailableDevices() {
+    throw UnimplementedError('getAvailableDevices() has not been implemented.');
+  }
+
+  /// 현재 선택된 오디오 디바이스 조회
+  Future<AudioDevice?> getCurrentAudioDevice() {
     throw UnimplementedError(
-        'getAvailableDevices() has not been implemented.');
+        'getCurrentAudioDevice() has not been implemented.');
   }
 
   /// 현재 스피커 모드 상태 확인

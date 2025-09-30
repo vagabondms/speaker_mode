@@ -206,6 +206,34 @@ private final class SpeakerModeController: NSObject, CXCallObserverDelegate {
     return devices
   }
 
+  func getCurrentDevice() -> AudioDeviceInfo? {
+    let session = AVAudioSession.sharedInstance()
+    guard let currentOutput = session.currentRoute.outputs.first else {
+      return nil
+    }
+
+    let portType = currentOutput.portType
+    if portType == .builtInSpeaker {
+      return AudioDeviceInfo(
+        id: "builtin_speaker",
+        name: "스피커",
+        type: "builtinSpeaker",
+        isConnected: true
+      )
+    } else if portType == .builtInReceiver {
+      return AudioDeviceInfo(
+        id: "builtin_receiver",
+        name: "리시버",
+        type: "builtinReceiver",
+        isConnected: true
+      )
+    } else {
+      // Find matching external device
+      let availableDevices = getAvailableDevices()
+      return availableDevices.first(where: { $0.id == currentOutput.uid })
+    }
+  }
+
   func setAudioDevice(deviceId: String) -> Result<Bool, SpeakerModeError> {
     let session = AVAudioSession.sharedInstance()
 
@@ -523,6 +551,9 @@ public class SpeakerModePlugin: NSObject, FlutterPlugin {
       let devices = controller.getAvailableDevices()
       let deviceMaps = devices.map { $0.toMap() }
       result(deviceMaps)
+    case "getCurrentAudioDevice":
+      let device = controller.getCurrentDevice()
+      result(device?.toMap())
     case "getSpeakerMode":
       result(controller.currentSpeakerMode())
     case "isExternalDeviceConnected":

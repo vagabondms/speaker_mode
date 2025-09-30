@@ -110,6 +110,21 @@ class MethodChannelSpeakerMode extends SpeakerModePlatform {
   }
 
   @override
+  Future<AudioDevice?> getCurrentAudioDevice() async {
+    try {
+      final result =
+          await methodChannel.invokeMethod<Map>('getCurrentAudioDevice');
+      if (result == null) {
+        return null;
+      }
+      return AudioDevice.fromMap(result);
+    } catch (e) {
+      debugPrint('getCurrentAudioDevice 에러: $e');
+      return null;
+    }
+  }
+
+  @override
   Future<bool?> getSpeakerMode() async {
     return _invokeBool('getSpeakerMode');
   }

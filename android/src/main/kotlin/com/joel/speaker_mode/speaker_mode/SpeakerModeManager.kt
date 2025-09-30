@@ -152,6 +152,18 @@ internal object SpeakerModeManager {
     return getAvailableDevicesInternal()
   }
 
+  fun getCurrentDevice(): AudioDeviceData? {
+    synchronized(lock) {
+      if (!initialized) {
+        return null
+      }
+      val availableDevices = getAvailableDevicesInternal()
+      val isSpeakerOn = audioManager.isSpeakerphoneOn
+      val isExternalConnected = isExternalDeviceConnectedInternal()
+      return determineSelectedDevice(availableDevices, isSpeakerOn, isExternalConnected)
+    }
+  }
+
   fun setAudioDevice(deviceId: String): SpeakerModeResult {
     synchronized(lock) {
       if (!initialized) {

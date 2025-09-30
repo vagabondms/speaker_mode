@@ -62,6 +62,10 @@ class SpeakerModePlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamH
         val deviceMaps = devices.map { it.toMap() }
         result.success(deviceMaps)
       }
+      "getCurrentAudioDevice" -> {
+        val device = SpeakerModeManager.getCurrentDevice()
+        result.success(device?.toMap())
+      }
       "getSpeakerMode" -> result.success(SpeakerModeManager.getSpeakerMode())
       "isExternalDeviceConnected" -> result.success(SpeakerModeManager.isExternalDeviceConnected())
       else -> result.notImplemented()

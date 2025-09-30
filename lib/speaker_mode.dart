@@ -87,10 +87,14 @@ class SpeakerMode {
         await SpeakerModePlatform.instance.getSpeakerMode() ?? false;
     final isExternalDeviceConnected =
         await SpeakerModePlatform.instance.isExternalDeviceConnected() ?? false;
+    final availableDevices = await getAvailableDevices();
+    final selectedDevice = await SpeakerModePlatform.instance.getCurrentAudioDevice();
 
     return AudioState(
       isSpeakerOn: isSpeakerOn,
       isExternalDeviceConnected: isExternalDeviceConnected,
+      availableDevices: availableDevices,
+      selectedDevice: selectedDevice,
     );
   }
 
