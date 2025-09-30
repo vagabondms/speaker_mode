@@ -51,6 +51,7 @@ private final class SpeakerModeController: NSObject, CXCallObserverDelegate {
   private var callObserver: CXCallObserver?
   private var sinks: [UUID: FlutterEventSink] = [:]
   private var pluginCount: Int = 0
+  private var connectedBluetoothDevices: [String: AudioDeviceInfo] = [:]
 
   private let externalPorts: Set<AVAudioSession.Port> = [
     .headphones,
@@ -95,48 +96,11 @@ private final class SpeakerModeController: NSObject, CXCallObserverDelegate {
     sinks.removeValue(forKey: handle)
   }
 
-  private func setSpeakerMode(enabled: Bool) -> Result<Bool, SpeakerModeError> {
-    let session = AVAudioSession.sharedInstance()
-    let shouldUseBuiltInSpeaker = enabled
-
-    do {
-      if isCallKitInUse() {
-        let desiredOptions: AVAudioSession.CategoryOptions
-        if shouldUseBuiltInSpeaker {
-          desiredOptions = session.categoryOptions.union([.defaultToSpeaker])
-        } else {
-          desiredOptions = session.categoryOptions.subtracting([.defaultToSpeaker])
-        }
-
-        if desiredOptions != session.categoryOptions {
-          try session.setCategory(session.category, mode: session.mode, options: desiredOptions)
-        }
-        try applyOutputOverride(session: session, useSpeaker: shouldUseBuiltInSpeaker)
-      } else {
-        var options: AVAudioSession.CategoryOptions = [.allowBluetooth]
-        if shouldUseBuiltInSpeaker {
-          options.insert(.defaultToSpeaker)
-        }
-
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: options)
-        try session.setActive(true)
-        try applyOutputOverride(session: session, useSpeaker: shouldUseBuiltInSpeaker)
-      }
-
-      isSpeakerModeOn = getActualSpeakerModeState()
-      sendAudioStateUpdate()
-      return .success(true)
-    } catch {
-      return .failure(.audioSession(makeAudioSessionErrorMessage(from: error)))
-    }
-  }
 
   func getAvailableDevices() -> [AudioDeviceInfo] {
     var devices: [AudioDeviceInfo] = []
-    let session = AVAudioSession.sharedInstance()
-    let currentOutputs = currentOutputPorts()
 
-    // Built-in speaker
+    // Always include built-in devices
     devices.append(AudioDeviceInfo(
       id: "builtin_speaker",
       name: "스피커",
@@ -144,7 +108,6 @@ private final class SpeakerModeController: NSObject, CXCallObserverDelegate {
       isConnected: true
     ))
 
-    // Built-in receiver
     devices.append(AudioDeviceInfo(
       id: "builtin_receiver",
       name: "리시버",
@@ -152,43 +115,46 @@ private final class SpeakerModeController: NSObject, CXCallObserverDelegate {
       isConnected: true
     ))
 
-    // Check current route for connected devices
+    // Include tracked Bluetooth devices
+    devices.append(contentsOf: connectedBluetoothDevices.values)
+
+    // Also check current route for any additional non-Bluetooth devices
+    let session = AVAudioSession.sharedInstance()
+    let existingIds = Set(devices.map { $0.id })
+
     for output in session.currentRoute.outputs {
       let portType = output.portType
-      let portName = output.portName
+      let deviceId = output.uid
 
-      if portType == .bluetoothA2DP || portType == .bluetoothHFP || portType == .bluetoothLE {
+      if existingIds.contains(deviceId) {
+        continue
+      }
+
+      if portType == .headphones {
         devices.append(AudioDeviceInfo(
-          id: output.uid,
-          name: portName,
-          type: "bluetooth",
-          isConnected: true
-        ))
-      } else if portType == .headphones {
-        devices.append(AudioDeviceInfo(
-          id: output.uid,
-          name: portName,
+          id: deviceId,
+          name: output.portName,
           type: "wiredHeadset",
           isConnected: true
         ))
       } else if portType == .usbAudio {
         devices.append(AudioDeviceInfo(
-          id: output.uid,
-          name: portName,
+          id: deviceId,
+          name: output.portName,
           type: "usb",
           isConnected: true
         ))
       } else if portType == .carAudio {
         devices.append(AudioDeviceInfo(
-          id: output.uid,
-          name: portName,
+          id: deviceId,
+          name: output.portName,
           type: "carAudio",
           isConnected: true
         ))
       } else if portType == .airPlay {
         devices.append(AudioDeviceInfo(
-          id: output.uid,
-          name: portName,
+          id: deviceId,
+          name: output.portName,
           type: "airplay",
           isConnected: true
         ))
@@ -230,14 +196,45 @@ private final class SpeakerModeController: NSObject, CXCallObserverDelegate {
     let session = AVAudioSession.sharedInstance()
 
     do {
-      // Handle built-in devices
+      // Handle built-in speaker
       if deviceId == "builtin_speaker" {
-        return setSpeakerMode(enabled: true)
-      } else if deviceId == "builtin_receiver" {
-        return setSpeakerMode(enabled: false)
+        // Add .defaultToSpeaker and remove .allowBluetooth to force routing to speaker
+        let desiredOptions: AVAudioSession.CategoryOptions = session.categoryOptions
+          .union([.defaultToSpeaker])
+          .subtracting([.allowBluetooth])
+        if desiredOptions != session.categoryOptions {
+          try session.setCategory(session.category, mode: session.mode, options: desiredOptions)
+        }
+        try session.overrideOutputAudioPort(.speaker)
+        isSpeakerModeOn = getActualSpeakerModeState()
+        sendAudioStateUpdate()
+        return .success(true)
       }
 
-      // For external devices, try to find and set the preferred input/output
+      // Handle built-in receiver
+      if deviceId == "builtin_receiver" {
+        // Remove both .defaultToSpeaker and .allowBluetooth to force routing to receiver
+        let desiredOptions: AVAudioSession.CategoryOptions = session.categoryOptions
+          .subtracting([.defaultToSpeaker, .allowBluetooth])
+        if desiredOptions != session.categoryOptions {
+          try session.setCategory(session.category, mode: session.mode, options: desiredOptions)
+        }
+        try session.overrideOutputAudioPort(.none)
+        isSpeakerModeOn = getActualSpeakerModeState()
+        sendAudioStateUpdate()
+        return .success(true)
+      }
+
+      // For external devices (Bluetooth, wired headset, etc.)
+      // Add .allowBluetooth and remove .defaultToSpeaker to route to external device
+      let desiredOptions: AVAudioSession.CategoryOptions = session.categoryOptions
+        .union([.allowBluetooth])
+        .subtracting([.defaultToSpeaker])
+      if desiredOptions != session.categoryOptions {
+        try session.setCategory(session.category, mode: session.mode, options: desiredOptions)
+      }
+
+      // Try to set preferred input for devices that support it
       let availableInputs = session.availableInputs ?? []
       if let matchingInput = availableInputs.first(where: { $0.uid == deviceId }) {
         try session.setPreferredInput(matchingInput)
@@ -246,7 +243,7 @@ private final class SpeakerModeController: NSObject, CXCallObserverDelegate {
         return .success(true)
       }
 
-      // If device is in current route outputs, it's already active
+      // If device is in current route outputs, it's already active or will become active
       for output in session.currentRoute.outputs {
         if output.uid == deviceId {
           isSpeakerModeOn = getActualSpeakerModeState()
@@ -298,9 +295,36 @@ private final class SpeakerModeController: NSObject, CXCallObserverDelegate {
     }
 
     switch reason {
-    case .newDeviceAvailable,
-         .oldDeviceUnavailable,
-         .categoryChange,
+    case .newDeviceAvailable:
+      // Track newly connected Bluetooth devices
+      let session = AVAudioSession.sharedInstance()
+      for output in session.currentRoute.outputs {
+        let portType = output.portType
+        if portType == .bluetoothA2DP || portType == .bluetoothHFP || portType == .bluetoothLE {
+          let deviceInfo = AudioDeviceInfo(
+            id: output.uid,
+            name: output.portName,
+            type: "bluetooth",
+            isConnected: true
+          )
+          connectedBluetoothDevices[output.uid] = deviceInfo
+        }
+      }
+      sendAudioStateUpdate()
+
+    case .oldDeviceUnavailable:
+      // Remove disconnected devices
+      if let previousRoute = userInfo[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription {
+        for output in previousRoute.outputs {
+          let portType = output.portType
+          if portType == .bluetoothA2DP || portType == .bluetoothHFP || portType == .bluetoothLE {
+            connectedBluetoothDevices.removeValue(forKey: output.uid)
+          }
+        }
+      }
+      sendAudioStateUpdate()
+
+    case .categoryChange,
          .override:
       sendAudioStateUpdate()
     default:

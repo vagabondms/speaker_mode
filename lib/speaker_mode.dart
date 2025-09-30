@@ -61,7 +61,8 @@ class SpeakerMode {
   /// 현재 오디오 상태 조회
   Future<AudioState> getAudioState() async {
     final availableDevices = await getAvailableDevices();
-    final selectedDevice = await SpeakerModePlatform.instance.getCurrentAudioDevice();
+    final selectedDevice =
+        await SpeakerModePlatform.instance.getCurrentAudioDevice();
 
     return AudioState(
       availableDevices: availableDevices,
