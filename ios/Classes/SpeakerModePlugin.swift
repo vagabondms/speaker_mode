@@ -5,6 +5,7 @@ import CallKit
 
 private enum SpeakerModeError: Error {
   case audioSession(String)
+  case invalidDevice(String)
 }
 
 private extension SpeakerModeError {
@@ -16,7 +17,29 @@ private extension SpeakerModeError {
         message: message,
         details: nil
       )
+    case .invalidDevice(let message):
+      return FlutterError(
+        code: "INVALID_DEVICE",
+        message: message,
+        details: nil
+      )
     }
+  }
+}
+
+private struct AudioDeviceInfo {
+  let id: String
+  let name: String
+  let type: String
+  let isConnected: Bool
+
+  func toMap() -> [String: Any] {
+    return [
+      "id": id,
+      "name": name,
+      "type": type,
+      "isConnected": isConnected
+    ]
   }
 }
 
@@ -116,6 +139,108 @@ private final class SpeakerModeController: NSObject, CXCallObserverDelegate {
     return currentOutputPorts().contains(where: externalPorts.contains)
   }
 
+  func getAvailableDevices() -> [AudioDeviceInfo] {
+    var devices: [AudioDeviceInfo] = []
+    let session = AVAudioSession.sharedInstance()
+    let currentOutputs = currentOutputPorts()
+
+    // Built-in speaker
+    devices.append(AudioDeviceInfo(
+      id: "builtin_speaker",
+      name: "스피커",
+      type: "builtinSpeaker",
+      isConnected: true
+    ))
+
+    // Built-in receiver
+    devices.append(AudioDeviceInfo(
+      id: "builtin_receiver",
+      name: "리시버",
+      type: "builtinReceiver",
+      isConnected: true
+    ))
+
+    // Check current route for connected devices
+    for output in session.currentRoute.outputs {
+      let portType = output.portType
+      let portName = output.portName
+
+      if portType == .bluetoothA2DP || portType == .bluetoothHFP || portType == .bluetoothLE {
+        devices.append(AudioDeviceInfo(
+          id: output.uid,
+          name: portName,
+          type: "bluetooth",
+          isConnected: true
+        ))
+      } else if portType == .headphones {
+        devices.append(AudioDeviceInfo(
+          id: output.uid,
+          name: portName,
+          type: "wiredHeadset",
+          isConnected: true
+        ))
+      } else if portType == .usbAudio {
+        devices.append(AudioDeviceInfo(
+          id: output.uid,
+          name: portName,
+          type: "usb",
+          isConnected: true
+        ))
+      } else if portType == .carAudio {
+        devices.append(AudioDeviceInfo(
+          id: output.uid,
+          name: portName,
+          type: "carAudio",
+          isConnected: true
+        ))
+      } else if portType == .airPlay {
+        devices.append(AudioDeviceInfo(
+          id: output.uid,
+          name: portName,
+          type: "airplay",
+          isConnected: true
+        ))
+      }
+    }
+
+    return devices
+  }
+
+  func setAudioDevice(deviceId: String) -> Result<Bool, SpeakerModeError> {
+    let session = AVAudioSession.sharedInstance()
+
+    do {
+      // Handle built-in devices
+      if deviceId == "builtin_speaker" {
+        return setSpeakerMode(enabled: true)
+      } else if deviceId == "builtin_receiver" {
+        return setSpeakerMode(enabled: false)
+      }
+
+      // For external devices, try to find and set the preferred input/output
+      let availableInputs = session.availableInputs ?? []
+      if let matchingInput = availableInputs.first(where: { $0.uid == deviceId }) {
+        try session.setPreferredInput(matchingInput)
+        isSpeakerModeOn = getActualSpeakerModeState()
+        sendAudioStateUpdate()
+        return .success(true)
+      }
+
+      // If device is in current route outputs, it's already active
+      for output in session.currentRoute.outputs {
+        if output.uid == deviceId {
+          isSpeakerModeOn = getActualSpeakerModeState()
+          sendAudioStateUpdate()
+          return .success(true)
+        }
+      }
+
+      return .failure(.invalidDevice("Device with ID \(deviceId) not found or not available."))
+    } catch {
+      return .failure(.audioSession(makeAudioSessionErrorMessage(from: error)))
+    }
+  }
+
   private func setupObservers() {
     NotificationCenter.default.addObserver(
       self,
@@ -191,10 +316,41 @@ private final class SpeakerModeController: NSObject, CXCallObserverDelegate {
     let actualSpeakerMode = getActualSpeakerModeState()
     isSpeakerModeOn = actualSpeakerMode
 
+    // Get available devices and selected device
+    let availableDevices = getAvailableDevices()
+    let availableDevicesMaps = availableDevices.map { $0.toMap() }
+
+    // Determine selected device based on current route
+    var selectedDeviceMap: [String: Any]?
+    let session = AVAudioSession.sharedInstance()
+    if let currentOutput = session.currentRoute.outputs.first {
+      let portType = currentOutput.portType
+      if portType == .builtInSpeaker {
+        selectedDeviceMap = AudioDeviceInfo(
+          id: "builtin_speaker",
+          name: "스피커",
+          type: "builtinSpeaker",
+          isConnected: true
+        ).toMap()
+      } else if portType == .builtInReceiver {
+        selectedDeviceMap = AudioDeviceInfo(
+          id: "builtin_receiver",
+          name: "리시버",
+          type: "builtinReceiver",
+          isConnected: true
+        ).toMap()
+      } else {
+        // Find matching external device
+        selectedDeviceMap = availableDevices.first(where: { $0.id == currentOutput.uid })?.toMap()
+      }
+    }
+
     let payload: [String: Any] = [
       "isSpeakerOn": actualSpeakerMode,
       "isExternalDeviceConnected": isExternalConnected,
-      "isCarAudioConnected": isCarAudioConnected
+      "isCarAudioConnected": isCarAudioConnected,
+      "availableDevices": availableDevicesMaps,
+      "selectedDevice": selectedDeviceMap as Any
     ]
 
     let targets: [FlutterEventSink]
@@ -346,6 +502,27 @@ public class SpeakerModePlugin: NSObject, FlutterPlugin {
       case .failure(let error):
         result(error.flutterError)
       }
+    case "setAudioDevice":
+      guard let args = call.arguments as? [String: Any],
+            let deviceId = args["deviceId"] as? String else {
+        result(FlutterError(
+          code: "INVALID_ARGUMENTS",
+          message: "Arguments must contain 'deviceId' string",
+          details: nil
+        ))
+        return
+      }
+
+      switch controller.setAudioDevice(deviceId: deviceId) {
+      case .success(let value):
+        result(value)
+      case .failure(let error):
+        result(error.flutterError)
+      }
+    case "getAvailableDevices":
+      let devices = controller.getAvailableDevices()
+      let deviceMaps = devices.map { $0.toMap() }
+      result(deviceMaps)
     case "getSpeakerMode":
       result(controller.currentSpeakerMode())
     case "isExternalDeviceConnected":

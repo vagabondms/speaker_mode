@@ -1,14 +1,41 @@
 # Speaker Mode
 
-Flutter 플러그인으로 iOS 및 Android에서 스피커 모드를 제어하고 외부 오디오 기기 연결 상태를 모니터링합니다. **VoIP 앱에서 통화 중 스피커 모드 전환 기능 구현에만 사용해야 합니다.**
+Flutter 플러그인으로 iOS 및 Android에서 오디오 라우팅을 제어하고 오디오 기기 연결 상태를 모니터링합니다. **VoIP 앱에서 통화 중 오디오 출력 제어 기능 구현에만 사용해야 합니다.**
+
+## 플러그인의 목적
+
+이 플러그인은 VoIP 통화 애플리케이션에서 **오디오 출력 장치를 동적으로 제어**하기 위해 설계되었습니다:
+
+- **멀티 디바이스 오디오 라우팅**: 내장 스피커, 리시버, 블루투스, 유선 헤드셋, USB 오디오, 차량 오디오 등 다양한 오디오 출력 장치 간 전환
+- **실시간 디바이스 감지**: 오디오 기기 연결/해제를 실시간으로 감지하고 자동으로 대응
+- **iOS AirPlay 스타일 UI**: 사용자 친화적인 디바이스 선택 인터페이스 제공
+- **하위 호환성**: 기존 bool 기반 스피커 모드 API도 계속 지원
 
 ## 기능
 
-- 스피커 모드 켜기/끄기
+### 오디오 라우팅
+
+- 여러 오디오 출력 장치 중 선택 (스피커, 리시버, 블루투스, 헤드셋 등)
+- 사용 가능한 오디오 디바이스 목록 조회
+- 현재 선택된 디바이스 확인
+- 레거시 스피커 모드 켜기/끄기 (하위 호환성)
+
+### 디바이스 감지 및 모니터링
+
 - 외부 오디오 기기(이어폰, 블루투스 등) 연결 상태 실시간 감지
-- 외부 기기 연결 시 자동으로 스피커 모드 비활성화
 - 오디오 상태 변경 스트림 제공
-- **iOS에서 CallKit과의 자동 호환성 지원**
+- 디바이스 연결/해제 시 자동 라우팅 조정
+
+### iOS 특화 기능
+
+- **CallKit 자동 호환성 지원**
+- AVAudioSession 기반 디바이스 관리
+- AirPlay 지원
+
+### Android 특화 기능
+
+- AudioManager 기반 디바이스 관리
+- 다양한 디바이스 타입 자동 감지
 
 ## 중요: 사용 제한 사항
 
@@ -29,14 +56,100 @@ dependencies:
 
 ## 사용 방법
 
-### 기본 사용법
+### 1. 기본 설정
 
 ```dart
 import 'package:speaker_mode/speaker_mode.dart';
+import 'package:speaker_mode/audio_source.dart';
+import 'package:speaker_mode/audio_device_picker.dart';
 
 // 인스턴스 생성
 final speakerMode = SpeakerMode();
+```
 
+### 2. 오디오 디바이스 선택 (권장)
+
+#### 사용 가능한 디바이스 목록 조회
+
+```dart
+// 현재 사용 가능한 오디오 디바이스 목록 가져오기
+final List<AudioDevice> devices = await speakerMode.getAvailableDevices();
+
+for (final device in devices) {
+  print('ID: ${device.id}');
+  print('이름: ${device.name}');
+  print('타입: ${device.type}');
+  print('연결 상태: ${device.isConnected}');
+}
+```
+
+#### 특정 디바이스로 라우팅 설정
+
+```dart
+// 디바이스 ID로 오디오 출력 설정
+await speakerMode.setAudioDevice('builtin_speaker');  // 내장 스피커
+await speakerMode.setAudioDevice('builtin_receiver'); // 리시버
+// 또는 외부 디바이스 ID 사용 (getAvailableDevices에서 획득)
+```
+
+#### UI 컴포넌트를 사용한 디바이스 선택
+
+```dart
+// iOS AirPlay 스타일의 디바이스 선택 UI 표시
+AudioDevicePicker.show(
+  context: context,
+  availableDevices: state.availableDevices,
+  selectedDevice: state.selectedDevice,
+  onDeviceSelected: (device) async {
+    await speakerMode.setAudioDevice(device.id);
+  },
+);
+
+// 또는 버튼 위젯 사용
+AudioDeviceButton(
+  selectedDevice: currentDevice,
+  onTap: () {
+    AudioDevicePicker.show(
+      context: context,
+      availableDevices: availableDevices,
+      selectedDevice: selectedDevice,
+      onDeviceSelected: (device) async {
+        await speakerMode.setAudioDevice(device.id);
+      },
+    );
+  },
+)
+```
+
+### 3. 오디오 상태 모니터링
+
+```dart
+// 오디오 상태 변경 스트림 구독
+final subscription = speakerMode.audioStateStream.listen((AudioState state) {
+  // 레거시 정보
+  print('스피커 모드: ${state.isSpeakerOn}');
+  print('외부 기기 연결: ${state.isExternalDeviceConnected}');
+
+  // 새로운 정보
+  print('사용 가능한 디바이스: ${state.availableDevices.length}개');
+  print('현재 선택된 디바이스: ${state.selectedDevice?.name}');
+
+  // UI 업데이트
+  setState(() {
+    _availableDevices = state.availableDevices;
+    _selectedDevice = state.selectedDevice;
+  });
+});
+
+// 사용 완료 후 구독 취소
+subscription.cancel();
+```
+
+### 4. 레거시 API (하위 호환성)
+
+기존 bool 기반 스피커 모드 API도 계속 지원됩니다:
+
+```dart
 // 현재 오디오 상태 확인
 final AudioState state = await speakerMode.getAudioState();
 print('스피커 모드: ${state.isSpeakerOn}');
@@ -49,17 +162,74 @@ await speakerMode.setSpeakerMode(true);
 await speakerMode.setSpeakerMode(false);
 ```
 
-### 오디오 상태 변경 모니터링
+### 5. 완전한 통합 예제
 
 ```dart
-// 오디오 상태 변경 스트림 구독
-final subscription = speakerMode.audioStateStream.listen((state) {
-  print('스피커 모드: ${state.isSpeakerOn}');
-  print('외부 기기 연결: ${state.isExternalDeviceConnected}');
-});
+class AudioControlPage extends StatefulWidget {
+  @override
+  State<AudioControlPage> createState() => _AudioControlPageState();
+}
 
-// 사용 완료 후 구독 취소
-subscription.cancel();
+class _AudioControlPageState extends State<AudioControlPage> {
+  final _speakerMode = SpeakerMode();
+  StreamSubscription<AudioState>? _subscription;
+
+  List<AudioDevice> _availableDevices = [];
+  AudioDevice? _selectedDevice;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAudioState();
+  }
+
+  Future<void> _initAudioState() async {
+    // 초기 상태 로드
+    final state = await _speakerMode.getAudioState();
+    setState(() {
+      _availableDevices = state.availableDevices;
+      _selectedDevice = state.selectedDevice;
+    });
+
+    // 스트림 구독
+    _subscription = _speakerMode.audioStateStream.listen((state) {
+      setState(() {
+        _availableDevices = state.availableDevices;
+        _selectedDevice = state.selectedDevice;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  void _showDevicePicker() {
+    AudioDevicePicker.show(
+      context: context,
+      availableDevices: _availableDevices,
+      selectedDevice: _selectedDevice,
+      onDeviceSelected: (device) async {
+        await _speakerMode.setAudioDevice(device.id);
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('오디오 출력')),
+      body: Center(
+        child: AudioDeviceButton(
+          selectedDevice: _selectedDevice,
+          onTap: _showDevicePicker,
+        ),
+      ),
+    );
+  }
+}
 ```
 
 ## iOS에서 CallKit 호환성
@@ -74,29 +244,46 @@ subscription.cancel();
 
 CallKit을 사용하는 앱에서는 별도의 설정 없이 이 플러그인을 사용할 수 있습니다. 플러그인이 CallKit의 오디오 세션 변경을 감지하고 그에 맞게 동작합니다.
 
+## 지원하는 오디오 디바이스 타입
+
+| 타입              | 설명                 | iOS | Android |
+| ----------------- | -------------------- | --- | ------- |
+| `builtinSpeaker`  | 내장 스피커          | ✅  | ✅      |
+| `builtinReceiver` | 내장 리시버 (통화용) | ✅  | ✅      |
+| `bluetooth`       | 블루투스 오디오      | ✅  | ✅      |
+| `wiredHeadset`    | 유선 헤드셋/이어폰   | ✅  | ✅      |
+| `usb`             | USB 오디오 디바이스  | ✅  | ✅      |
+| `carAudio`        | 차량 오디오          | ✅  | ❌      |
+| `airplay`         | AirPlay 디바이스     | ✅  | ❌      |
+
 ## 플랫폼별 구현 세부 사항
 
 ### iOS
 
-- `AVAudioSession`을 사용하여 스피커 모드 제어
+- `AVAudioSession`을 사용하여 오디오 라우팅 제어
 - `.playAndRecord` 카테고리와 `.voiceChat` 모드 사용
+- `AVAudioSession.currentRoute`에서 디바이스 목록 추출
 - 스피커 모드 활성화 시 `.defaultToSpeaker` 옵션 추가
+- `setPreferredInput`을 사용한 입력 디바이스 설정 (일부 디바이스)
 - `AVAudioSession.routeChangeNotification`을 통해 오디오 라우트 변경 감지
 - CallKit 호환성을 위한 오디오 세션 인터럽션 및 상태 변경 감지
 
 ### Android
 
-- `AudioManager`를 사용하여 스피커 모드 제어
+- `AudioManager`를 사용하여 오디오 라우팅 제어
 - `AudioManager.MODE_IN_COMMUNICATION` 모드 설정
+- `AudioManager.getDevices(GET_DEVICES_OUTPUTS)`로 디바이스 목록 추출
+- `AudioDeviceInfo`를 통한 디바이스 정보 획득 (타입, 이름, ID)
 - `audioManager.isSpeakerphoneOn` 속성으로 스피커폰 제어
-- `BroadcastReceiver`를 사용하여 헤드셋 연결/해제, 블루투스 연결/해제 등의 이벤트 감지
+- `BroadcastReceiver` 및 `AudioDeviceCallback`을 사용한 디바이스 연결/해제 감지
 
 ## 주의 사항
 
-1. 외부 오디오 기기가 연결된 경우 스피커 모드를 활성화할 수 없습니다.
-2. iOS에서 CallKit을 사용하는 경우 오디오 세션 충돌이 자동으로 방지됩니다.
-3. Android에서 블루투스 연결 시 스피커 전환이 안될 수 있습니다.
-4. 통화 중이 아닌 상태에서 이 플러그인을 사용하면 다른 미디어 앱의 오디오 재생에 영향을 줄 수 있습니다.
+1. **VoIP 전용**: 통화 중이 아닌 상태에서 이 플러그인을 사용하면 다른 미디어 앱의 오디오 재생에 영향을 줄 수 있습니다.
+2. **외부 디바이스 우선**: 외부 오디오 기기가 연결된 경우 레거시 스피커 모드(`setSpeakerMode(true)`)를 활성화할 수 없습니다. 대신 `setAudioDevice()`를 사용하세요.
+3. **CallKit 호환**: iOS에서 CallKit을 사용하는 경우 오디오 세션 충돌이 자동으로 방지됩니다.
+4. **블루투스 제한**: Android에서 일부 블루투스 디바이스는 시스템이 자동으로 제어하므로 수동 전환이 제한될 수 있습니다.
+5. **디바이스 ID**: 외부 디바이스의 ID는 연결 세션마다 변경될 수 있으므로 항상 `getAvailableDevices()`로 최신 목록을 가져오세요.
 
 ## 예제
 

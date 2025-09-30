@@ -1,5 +1,6 @@
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
+import 'audio_source.dart';
 import 'speaker_mode.dart';
 import 'speaker_mode_method_channel.dart';
 
@@ -27,6 +28,17 @@ abstract class SpeakerModePlatform extends PlatformInterface {
   /// 스피커 모드 활성화/비활성화
   Future<bool?> setSpeakerMode(bool enabled) {
     throw UnimplementedError('setSpeakerMode() has not been implemented.');
+  }
+
+  /// 특정 오디오 디바이스로 라우팅 설정
+  Future<bool?> setAudioDevice(String deviceId) {
+    throw UnimplementedError('setAudioDevice() has not been implemented.');
+  }
+
+  /// 사용 가능한 오디오 디바이스 목록 조회
+  Future<List<AudioDevice>> getAvailableDevices() {
+    throw UnimplementedError(
+        'getAvailableDevices() has not been implemented.');
   }
 
   /// 현재 스피커 모드 상태 확인

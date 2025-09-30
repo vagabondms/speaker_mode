@@ -16,6 +16,22 @@ internal sealed class SpeakerModeResult {
   data class Error(val code: String, val message: String?) : SpeakerModeResult()
 }
 
+internal data class AudioDeviceData(
+  val id: String,
+  val name: String,
+  val type: String,
+  val isConnected: Boolean
+) {
+  fun toMap(): Map<String, Any> {
+    return mapOf(
+      "id" to id,
+      "name" to name,
+      "type" to type,
+      "isConnected" to isConnected
+    )
+  }
+}
+
 internal object SpeakerModeManager {
   private val lock = Any()
   private val mainHandler = Handler(Looper.getMainLooper())
@@ -127,6 +143,68 @@ internal object SpeakerModeManager {
     return isExternalDeviceConnectedInternal()
   }
 
+  fun getAvailableDevices(): List<AudioDeviceData> {
+    synchronized(lock) {
+      if (!initialized) {
+        return emptyList()
+      }
+    }
+    return getAvailableDevicesInternal()
+  }
+
+  fun setAudioDevice(deviceId: String): SpeakerModeResult {
+    synchronized(lock) {
+      if (!initialized) {
+        return SpeakerModeResult.Error(
+          code = "NOT_INITIALIZED",
+          message = "SpeakerModeManager is not initialized."
+        )
+      }
+
+      return try {
+        when (deviceId) {
+          "builtin_speaker" -> {
+            applySpeakerStateInternal(true)
+            pendingSpeakerState = true
+            notifyAudioStateChanged(forceSpeakerState = true)
+            mainHandler.postDelayed({ notifyAudioStateChanged() }, 200)
+            SpeakerModeResult.Success(true)
+          }
+          "builtin_receiver" -> {
+            applySpeakerStateInternal(false)
+            pendingSpeakerState = false
+            notifyAudioStateChanged(forceSpeakerState = false)
+            mainHandler.postDelayed({ notifyAudioStateChanged() }, 200)
+            SpeakerModeResult.Success(true)
+          }
+          else -> {
+            // For external devices, check if they exist and are connected
+            val availableDevices = getAvailableDevicesInternal()
+            val targetDevice = availableDevices.find { it.id == deviceId }
+            if (targetDevice != null && targetDevice.isConnected) {
+              // External device is connected, disable speaker mode to route to it
+              applySpeakerStateInternal(false)
+              pendingSpeakerState = false
+              notifyAudioStateChanged(forceSpeakerState = false)
+              mainHandler.postDelayed({ notifyAudioStateChanged() }, 200)
+              SpeakerModeResult.Success(true)
+            } else {
+              SpeakerModeResult.Error(
+                code = "INVALID_DEVICE",
+                message = "Device with ID $deviceId not found or not connected"
+              )
+            }
+          }
+        }
+      } catch (e: Exception) {
+        SpeakerModeResult.Error(
+          code = "AUDIO_MANAGER_ERROR",
+          message = e.message
+        )
+      }
+    }
+  }
+
   fun addListener(sink: EventChannel.EventSink) {
     synchronized(lock) {
       eventSinks.add(sink)
@@ -218,9 +296,18 @@ internal object SpeakerModeManager {
         pendingSpeakerState = forceSpeakerState
       }
 
+      // Get available devices and selected device
+      val availableDevices = getAvailableDevicesInternal()
+      val availableDevicesMaps = availableDevices.map { it.toMap() }
+
+      // Determine selected device
+      val selectedDevice = determineSelectedDevice(availableDevices, speakerState, isExternalConnected)
+
       val state = mapOf(
         "isSpeakerOn" to speakerState,
-        "isExternalDeviceConnected" to isExternalConnected
+        "isExternalDeviceConnected" to isExternalConnected,
+        "availableDevices" to availableDevicesMaps,
+        "selectedDevice" to selectedDevice?.toMap()
       )
 
       sinksToNotify to state
@@ -233,6 +320,27 @@ internal object SpeakerModeManager {
         sink.success(audioState)
       } catch (_: Exception) {
         removeListener(sink)
+      }
+    }
+  }
+
+  private fun determineSelectedDevice(
+    availableDevices: List<AudioDeviceData>,
+    isSpeakerOn: Boolean,
+    isExternalConnected: Boolean
+  ): AudioDeviceData? {
+    return when {
+      isExternalConnected -> {
+        // Find the first external device that's connected
+        availableDevices.find {
+          it.type != "builtinSpeaker" && it.type != "builtinReceiver" && it.isConnected
+        }
+      }
+      isSpeakerOn -> {
+        availableDevices.find { it.id == "builtin_speaker" }
+      }
+      else -> {
+        availableDevices.find { it.id == "builtin_receiver" }
       }
     }
   }
@@ -268,5 +376,69 @@ internal object SpeakerModeManager {
       }
     }
     return false
+  }
+
+  private fun getAvailableDevicesInternal(): List<AudioDeviceData> {
+    val devices = mutableListOf<AudioDeviceData>()
+
+    // Always add built-in devices
+    devices.add(
+      AudioDeviceData(
+        id = "builtin_speaker",
+        name = "스피커",
+        type = "builtinSpeaker",
+        isConnected = true
+      )
+    )
+    devices.add(
+      AudioDeviceData(
+        id = "builtin_receiver",
+        name = "리시버",
+        type = "builtinReceiver",
+        isConnected = true
+      )
+    )
+
+    // Get all connected output devices
+    val outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+    for (device in outputDevices) {
+      when (device.type) {
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> {
+          devices.add(
+            AudioDeviceData(
+              id = device.id.toString(),
+              name = device.productName?.toString() ?: "블루투스",
+              type = "bluetooth",
+              isConnected = true
+            )
+          )
+        }
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+        AudioDeviceInfo.TYPE_WIRED_HEADSET -> {
+          devices.add(
+            AudioDeviceData(
+              id = device.id.toString(),
+              name = device.productName?.toString() ?: "유선 헤드셋",
+              type = "wiredHeadset",
+              isConnected = true
+            )
+          )
+        }
+        AudioDeviceInfo.TYPE_USB_HEADSET,
+        AudioDeviceInfo.TYPE_USB_DEVICE -> {
+          devices.add(
+            AudioDeviceData(
+              id = device.id.toString(),
+              name = device.productName?.toString() ?: "USB 오디오",
+              type = "usb",
+              isConnected = true
+            )
+          )
+        }
+      }
+    }
+
+    return devices
   }
 }

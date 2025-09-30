@@ -41,6 +41,27 @@ class SpeakerModePlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamH
           )
         }
       }
+      "setAudioDevice" -> {
+        val deviceId = call.argument<String>("deviceId")
+        if (deviceId == null) {
+          result.error("INVALID_ARGUMENTS", "Arguments must contain 'deviceId' string", null)
+          return
+        }
+
+        when (val managerResult = SpeakerModeManager.setAudioDevice(deviceId)) {
+          is SpeakerModeResult.Success -> result.success(managerResult.value)
+          is SpeakerModeResult.Error -> result.error(
+            managerResult.code,
+            managerResult.message,
+            null
+          )
+        }
+      }
+      "getAvailableDevices" -> {
+        val devices = SpeakerModeManager.getAvailableDevices()
+        val deviceMaps = devices.map { it.toMap() }
+        result.success(deviceMaps)
+      }
       "getSpeakerMode" -> result.success(SpeakerModeManager.getSpeakerMode())
       "isExternalDeviceConnected" -> result.success(SpeakerModeManager.isExternalDeviceConnected())
       else -> result.notImplemented()

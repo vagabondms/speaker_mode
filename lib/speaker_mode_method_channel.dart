@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'audio_source.dart';
 import 'speaker_mode.dart';
 import 'speaker_mode_platform_interface.dart';
 
@@ -38,9 +39,33 @@ class MethodChannelSpeakerMode extends SpeakerModePlatform {
     final isExternalDeviceConnected =
         data['isExternalDeviceConnected'] as bool? ?? false;
 
+    // Parse available devices
+    final List<AudioDevice> availableDevices = [];
+    if (data['availableDevices'] != null) {
+      final devicesData = data['availableDevices'] as List?;
+      if (devicesData != null) {
+        for (final deviceData in devicesData) {
+          if (deviceData is Map) {
+            availableDevices.add(AudioDevice.fromMap(deviceData));
+          }
+        }
+      }
+    }
+
+    // Parse selected device
+    AudioDevice? selectedDevice;
+    if (data['selectedDevice'] != null) {
+      final deviceData = data['selectedDevice'] as Map?;
+      if (deviceData != null) {
+        selectedDevice = AudioDevice.fromMap(deviceData);
+      }
+    }
+
     return AudioState(
       isSpeakerOn: isSpeakerOn,
       isExternalDeviceConnected: isExternalDeviceConnected,
+      availableDevices: availableDevices,
+      selectedDevice: selectedDevice,
     );
   }
 
@@ -55,6 +80,33 @@ class MethodChannelSpeakerMode extends SpeakerModePlatform {
   @override
   Future<bool?> setSpeakerMode(bool enabled) async {
     return _invokeBool('setSpeakerMode', {'enabled': enabled});
+  }
+
+  @override
+  Future<bool?> setAudioDevice(String deviceId) async {
+    return _invokeBool('setAudioDevice', {'deviceId': deviceId});
+  }
+
+  @override
+  Future<List<AudioDevice>> getAvailableDevices() async {
+    try {
+      final result =
+          await methodChannel.invokeMethod<List>('getAvailableDevices');
+      if (result == null) {
+        return [];
+      }
+
+      final devices = <AudioDevice>[];
+      for (final deviceData in result) {
+        if (deviceData is Map) {
+          devices.add(AudioDevice.fromMap(deviceData));
+        }
+      }
+      return devices;
+    } catch (e) {
+      debugPrint('getAvailableDevices 에러: $e');
+      return [];
+    }
   }
 
   @override
