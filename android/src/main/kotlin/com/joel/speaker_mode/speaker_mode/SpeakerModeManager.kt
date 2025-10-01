@@ -47,10 +47,44 @@ internal object SpeakerModeManager {
 
   private val audioDeviceCallback = object : AudioDeviceCallback() {
     override fun onAudioDevicesAdded(addedDevices: Array<AudioDeviceInfo>) {
+      // Auto-switch to newly connected wired/USB devices
+      synchronized(lock) {
+        if (!initialized) return
+
+        for (device in addedDevices) {
+          // Only auto-switch for wired and USB devices (not Bluetooth)
+          when (device.type) {
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_USB_HEADSET,
+            AudioDeviceInfo.TYPE_USB_DEVICE -> {
+              // Auto-switch to this device
+              audioManager.setCommunicationDevice(device)
+              break  // Switch to first wired/USB device found
+            }
+          }
+        }
+      }
       notifyAudioStateChanged()
     }
 
     override fun onAudioDevicesRemoved(removedDevices: Array<AudioDeviceInfo>) {
+      // When device is removed, fallback to default (receiver)
+      synchronized(lock) {
+        if (!initialized) return
+
+        val currentDevice = audioManager.communicationDevice
+        if (currentDevice != null) {
+          // Check if the removed device was the current one
+          for (removed in removedDevices) {
+            if (removed.id == currentDevice.id) {
+              // Current device was removed, clear to use default
+              audioManager.clearCommunicationDevice()
+              break
+            }
+          }
+        }
+      }
       notifyAudioStateChanged()
     }
   }
@@ -60,6 +94,11 @@ internal object SpeakerModeManager {
       if (!initialized) {
         appContext = context.applicationContext
         audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+        // Set audio mode to MODE_IN_COMMUNICATION for VoIP calls
+        // This is required for setCommunicationDevice() to work properly
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+
         registerReceivers()
         initialized = true
       }
@@ -105,33 +144,28 @@ internal object SpeakerModeManager {
         return
       }
 
-      // API 29+: Use setCommunicationDevice() for accurate device selection
+      // API 29+: Use setCommunicationDevice() for all device switching
       val availableDevices = audioManager.availableCommunicationDevices
 
-      // Find the device by ID
-      val targetDevice = availableDevices.find { it.id.toString() == deviceId }
-
-      if (targetDevice != null) {
-        // Set the communication device
-        audioManager.setCommunicationDevice(targetDevice)
-      } else {
-        // Fallback for built-in devices that might not be in the list
-        when (deviceId) {
-          "builtin_speaker" -> {
-            // Try to find built-in speaker in available devices
-            val speaker = availableDevices.find {
-              it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
-            }
-            if (speaker != null) {
-              audioManager.setCommunicationDevice(speaker)
-            } else {
-              // Fallback to legacy method
-              audioManager.isSpeakerphoneOn = true
-            }
+      when (deviceId) {
+        "builtin_speaker" -> {
+          // Find built-in speaker in available devices
+          val speaker = availableDevices.find {
+            it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
           }
-          "builtin_receiver" -> {
-            // Clear communication device to use default (receiver)
-            audioManager.clearCommunicationDevice()
+          if (speaker != null) {
+            audioManager.setCommunicationDevice(speaker)
+          }
+        }
+        "builtin_receiver" -> {
+          // Clear communication device to use default (receiver/earpiece)
+          audioManager.clearCommunicationDevice()
+        }
+        else -> {
+          // External device (USB, Bluetooth, Wired) - find by ID
+          val targetDevice = availableDevices.find { it.id.toString() == deviceId }
+          if (targetDevice != null) {
+            audioManager.setCommunicationDevice(targetDevice)
           }
         }
       }
@@ -267,17 +301,10 @@ internal object SpeakerModeManager {
       )
     }
 
-    // Fallback: No communication device set, check speaker state
-    return if (audioManager.isSpeakerphoneOn) {
-      AudioDeviceData(
-        id = "builtin_speaker",
-        type = "builtinSpeaker"
-      )
-    } else {
-      AudioDeviceData(
-        id = "builtin_receiver",
-        type = "builtinReceiver"
-      )
-    }
+    // Fallback: No communication device set (means default receiver/earpiece)
+    return AudioDeviceData(
+      id = "builtin_receiver",
+      type = "builtinReceiver"
+    )
   }
 }
