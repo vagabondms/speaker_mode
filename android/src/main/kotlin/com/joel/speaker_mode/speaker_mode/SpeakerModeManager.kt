@@ -71,6 +71,9 @@ internal object SpeakerModeManager {
             AudioDeviceInfo.TYPE_USB_DEVICE -> {
               // Auto-switch to this device
               Log.d(TAG, "Auto-switching to device: id=${device.id}, type=${getDeviceTypeString(device.type)}")
+              // Clear first to avoid conflicts with telephony apps (Samsung issue)
+              audioManager.clearCommunicationDevice()
+              Thread.sleep(50)
               val success = audioManager.setCommunicationDevice(device)
               Log.d(TAG, "Auto-switch result: $success")
               break  // Switch to first wired/USB device found
@@ -166,6 +169,7 @@ internal object SpeakerModeManager {
 
   fun setAudioDevice(deviceId: String) {
     Log.d(TAG, "setAudioDevice() called with deviceId: $deviceId")
+    Log.d(TAG, "Current audio mode: ${audioManager.mode} (0=NORMAL, 1=RINGTONE, 2=IN_CALL, 3=IN_COMMUNICATION)")
 
     synchronized(lock) {
       if (!initialized) {
@@ -184,6 +188,9 @@ internal object SpeakerModeManager {
           }
           if (speaker != null) {
             Log.d(TAG, "Setting speaker device: id=${speaker.id}")
+            // Clear first to avoid conflicts with telephony apps
+            audioManager.clearCommunicationDevice()
+            Thread.sleep(50)
             val success = audioManager.setCommunicationDevice(speaker)
             Log.d(TAG, "setCommunicationDevice(speaker) result: $success")
           } else {
@@ -201,6 +208,9 @@ internal object SpeakerModeManager {
           if (targetDevice != null) {
             val typeString = getDeviceTypeString(targetDevice.type)
             Log.d(TAG, "Found target device: type=${targetDevice.type}($typeString), product=${targetDevice.productName}")
+            // Clear first to avoid conflicts with telephony apps (Samsung issue)
+            audioManager.clearCommunicationDevice()
+            Thread.sleep(50)
             val success = audioManager.setCommunicationDevice(targetDevice)
             Log.d(TAG, "setCommunicationDevice(target) result: $success")
             if (!success) {
