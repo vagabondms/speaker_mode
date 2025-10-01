@@ -78,15 +78,15 @@ class AudioDevicePickerDialog extends StatelessWidget {
       case AudioSourceType.builtinSpeaker:
         return '스피커';
       case AudioSourceType.builtinReceiver:
-        return '리시버';
+        return '휴대폰';
       case AudioSourceType.bluetooth:
-        return '블루투스';
+        return 'Bluetooth';
       case AudioSourceType.wiredHeadset:
-        return '유선 헤드셋';
+        return '이어폰';
       case AudioSourceType.usb:
-        return 'USB 오디오';
+        return 'USB 장치';
       case AudioSourceType.carAudio:
-        return 'CarPlay';
+        return '차량 오디오';
       case AudioSourceType.airplay:
         return 'AirPlay';
       case AudioSourceType.unknown:

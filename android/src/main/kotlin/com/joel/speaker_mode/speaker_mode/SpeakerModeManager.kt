@@ -105,17 +105,34 @@ internal object SpeakerModeManager {
         return
       }
 
-      when (deviceId) {
-        "builtin_speaker" -> {
-          audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-          audioManager.isSpeakerphoneOn = true
-        }
-        "builtin_receiver" -> {
-          audioManager.isSpeakerphoneOn = false
-        }
-        else -> {
-          // External device - Android handles automatically
-          audioManager.isSpeakerphoneOn = false
+      // API 29+: Use setCommunicationDevice() for accurate device selection
+      val availableDevices = audioManager.availableCommunicationDevices
+
+      // Find the device by ID
+      val targetDevice = availableDevices.find { it.id.toString() == deviceId }
+
+      if (targetDevice != null) {
+        // Set the communication device
+        audioManager.setCommunicationDevice(targetDevice)
+      } else {
+        // Fallback for built-in devices that might not be in the list
+        when (deviceId) {
+          "builtin_speaker" -> {
+            // Try to find built-in speaker in available devices
+            val speaker = availableDevices.find {
+              it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+            }
+            if (speaker != null) {
+              audioManager.setCommunicationDevice(speaker)
+            } else {
+              // Fallback to legacy method
+              audioManager.isSpeakerphoneOn = true
+            }
+          }
+          "builtin_receiver" -> {
+            // Clear communication device to use default (receiver)
+            audioManager.clearCommunicationDevice()
+          }
         }
       }
     }
@@ -204,62 +221,53 @@ internal object SpeakerModeManager {
   private fun getAvailableDevicesInternal(): List<AudioDeviceData> {
     val devices = mutableListOf<AudioDeviceData>()
 
-    // Always add built-in devices
-    devices.add(AudioDeviceData(id = "builtin_speaker", type = "builtinSpeaker"))
-    devices.add(AudioDeviceData(id = "builtin_receiver", type = "builtinReceiver"))
+    // API 29+: Use getAvailableCommunicationDevices() for accurate list
+    val availableDevices = audioManager.availableCommunicationDevices
 
-    // Get all connected output devices
-    val outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-    for (device in outputDevices) {
-      when (device.type) {
+    for (device in availableDevices) {
+      val deviceType = when (device.type) {
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "builtinSpeaker"
+        AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "builtinReceiver"
         AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-        AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> {
-          devices.add(AudioDeviceData(id = device.id.toString(), type = "bluetooth"))
-        }
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "bluetooth"
         AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
-        AudioDeviceInfo.TYPE_WIRED_HEADSET -> {
-          devices.add(AudioDeviceData(id = device.id.toString(), type = "wiredHeadset"))
-        }
+        AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wiredHeadset"
         AudioDeviceInfo.TYPE_USB_HEADSET,
-        AudioDeviceInfo.TYPE_USB_DEVICE -> {
-          devices.add(AudioDeviceData(id = device.id.toString(), type = "usb"))
-        }
+        AudioDeviceInfo.TYPE_USB_DEVICE -> "usb"
+        else -> continue  // Skip unsupported types
       }
+
+      devices.add(AudioDeviceData(id = device.id.toString(), type = deviceType))
     }
 
     return devices
   }
 
   private fun getCurrentDeviceInternal(): AudioDeviceData? {
-    // Check if external device is connected
-    val outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-    for (device in outputDevices) {
-      when (device.type) {
+    // API 29+: Use getCommunicationDevice() to get the actual active device
+    val currentDevice = audioManager.communicationDevice
+
+    if (currentDevice != null) {
+      // Map AudioDeviceInfo type to our type string
+      val deviceType = when (currentDevice.type) {
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "builtinSpeaker"
+        AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "builtinReceiver"
         AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-        AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> {
-          return AudioDeviceData(
-            id = device.id.toString(),
-            type = "bluetooth"
-          )
-        }
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "bluetooth"
         AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
-        AudioDeviceInfo.TYPE_WIRED_HEADSET -> {
-          return AudioDeviceData(
-            id = device.id.toString(),
-            type = "wiredHeadset"
-          )
-        }
+        AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wiredHeadset"
         AudioDeviceInfo.TYPE_USB_HEADSET,
-        AudioDeviceInfo.TYPE_USB_DEVICE -> {
-          return AudioDeviceData(
-            id = device.id.toString(),
-            type = "usb"
-          )
-        }
+        AudioDeviceInfo.TYPE_USB_DEVICE -> "usb"
+        else -> "unknown"
       }
+
+      return AudioDeviceData(
+        id = currentDevice.id.toString(),
+        type = deviceType
+      )
     }
 
-    // No external device, check speaker state
+    // Fallback: No communication device set, check speaker state
     return if (audioManager.isSpeakerphoneOn) {
       AudioDeviceData(
         id = "builtin_speaker",
