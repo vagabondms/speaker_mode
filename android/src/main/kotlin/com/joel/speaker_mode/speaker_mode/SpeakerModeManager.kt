@@ -9,6 +9,7 @@ import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import io.flutter.plugin.common.EventChannel
 
 internal data class AudioDeviceData(
@@ -24,6 +25,7 @@ internal data class AudioDeviceData(
 }
 
 internal object SpeakerModeManager {
+  private const val TAG = "SpeakerModeManager"
   private val lock = Any()
   private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -47,9 +49,18 @@ internal object SpeakerModeManager {
 
   private val audioDeviceCallback = object : AudioDeviceCallback() {
     override fun onAudioDevicesAdded(addedDevices: Array<AudioDeviceInfo>) {
+      Log.d(TAG, "onAudioDevicesAdded: ${addedDevices.size} device(s)")
+      addedDevices.forEach { device ->
+        val typeString = getDeviceTypeString(device.type)
+        Log.d(TAG, "  Added: id=${device.id}, type=${device.type}($typeString), product=${device.productName}")
+      }
+
       // Auto-switch to newly connected wired/USB devices
       synchronized(lock) {
-        if (!initialized) return
+        if (!initialized) {
+          Log.w(TAG, "onAudioDevicesAdded: not initialized, skipping auto-switch")
+          return
+        }
 
         for (device in addedDevices) {
           // Only auto-switch for wired and USB devices (not Bluetooth)
@@ -59,7 +70,9 @@ internal object SpeakerModeManager {
             AudioDeviceInfo.TYPE_USB_HEADSET,
             AudioDeviceInfo.TYPE_USB_DEVICE -> {
               // Auto-switch to this device
-              audioManager.setCommunicationDevice(device)
+              Log.d(TAG, "Auto-switching to device: id=${device.id}, type=${getDeviceTypeString(device.type)}")
+              val success = audioManager.setCommunicationDevice(device)
+              Log.d(TAG, "Auto-switch result: $success")
               break  // Switch to first wired/USB device found
             }
           }
@@ -69,20 +82,33 @@ internal object SpeakerModeManager {
     }
 
     override fun onAudioDevicesRemoved(removedDevices: Array<AudioDeviceInfo>) {
+      Log.d(TAG, "onAudioDevicesRemoved: ${removedDevices.size} device(s)")
+      removedDevices.forEach { device ->
+        val typeString = getDeviceTypeString(device.type)
+        Log.d(TAG, "  Removed: id=${device.id}, type=${device.type}($typeString), product=${device.productName}")
+      }
+
       // When device is removed, fallback to default (receiver)
       synchronized(lock) {
-        if (!initialized) return
+        if (!initialized) {
+          Log.w(TAG, "onAudioDevicesRemoved: not initialized")
+          return
+        }
 
         val currentDevice = audioManager.communicationDevice
         if (currentDevice != null) {
+          Log.d(TAG, "Current device: id=${currentDevice.id}")
           // Check if the removed device was the current one
           for (removed in removedDevices) {
             if (removed.id == currentDevice.id) {
               // Current device was removed, clear to use default
+              Log.d(TAG, "Current device was removed, clearing communication device")
               audioManager.clearCommunicationDevice()
               break
             }
           }
+        } else {
+          Log.d(TAG, "No current communication device set")
         }
       }
       notifyAudioStateChanged()
@@ -139,8 +165,11 @@ internal object SpeakerModeManager {
   }
 
   fun setAudioDevice(deviceId: String) {
+    Log.d(TAG, "setAudioDevice() called with deviceId: $deviceId")
+
     synchronized(lock) {
       if (!initialized) {
+        Log.w(TAG, "setAudioDevice() failed: not initialized")
         return
       }
 
@@ -154,18 +183,38 @@ internal object SpeakerModeManager {
             it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
           }
           if (speaker != null) {
-            audioManager.setCommunicationDevice(speaker)
+            Log.d(TAG, "Setting speaker device: id=${speaker.id}")
+            val success = audioManager.setCommunicationDevice(speaker)
+            Log.d(TAG, "setCommunicationDevice(speaker) result: $success")
+          } else {
+            Log.e(TAG, "Built-in speaker not found in available devices!")
           }
         }
         "builtin_receiver" -> {
-          // Clear communication device to use default (receiver/earpiece)
+          Log.d(TAG, "Clearing communication device (receiver)")
           audioManager.clearCommunicationDevice()
         }
         else -> {
           // External device (USB, Bluetooth, Wired) - find by ID
+          Log.d(TAG, "Looking for external device with id: $deviceId")
           val targetDevice = availableDevices.find { it.id.toString() == deviceId }
           if (targetDevice != null) {
-            audioManager.setCommunicationDevice(targetDevice)
+            val typeString = getDeviceTypeString(targetDevice.type)
+            Log.d(TAG, "Found target device: type=${targetDevice.type}($typeString), product=${targetDevice.productName}")
+            val success = audioManager.setCommunicationDevice(targetDevice)
+            Log.d(TAG, "setCommunicationDevice(target) result: $success")
+            if (!success) {
+              Log.e(TAG, "Failed to set communication device! Current available devices:")
+              availableDevices.forEach { device ->
+                Log.e(TAG, "  - id=${device.id}, type=${getDeviceTypeString(device.type)}")
+              }
+            }
+          } else {
+            Log.e(TAG, "Target device not found! deviceId=$deviceId")
+            Log.e(TAG, "Available devices:")
+            availableDevices.forEach { device ->
+              Log.e(TAG, "  - id=${device.id}, type=${getDeviceTypeString(device.type)}")
+            }
           }
         }
       }
@@ -258,7 +307,11 @@ internal object SpeakerModeManager {
     // API 29+: Use getAvailableCommunicationDevices() for accurate list
     val availableDevices = audioManager.availableCommunicationDevices
 
+    Log.d(TAG, "=== Available Communication Devices (${availableDevices.size}) ===")
     for (device in availableDevices) {
+      val typeString = getDeviceTypeString(device.type)
+      Log.d(TAG, "  Device: id=${device.id}, type=${device.type}($typeString), product=${device.productName}")
+
       val deviceType = when (device.type) {
         AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "builtinSpeaker"
         AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "builtinReceiver"
@@ -268,13 +321,32 @@ internal object SpeakerModeManager {
         AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wiredHeadset"
         AudioDeviceInfo.TYPE_USB_HEADSET,
         AudioDeviceInfo.TYPE_USB_DEVICE -> "usb"
-        else -> continue  // Skip unsupported types
+        else -> {
+          Log.w(TAG, "  Skipping unsupported device type: ${device.type}($typeString)")
+          continue
+        }
       }
 
       devices.add(AudioDeviceData(id = device.id.toString(), type = deviceType))
     }
+    Log.d(TAG, "=== Total mapped devices: ${devices.size} ===")
 
     return devices
+  }
+
+  private fun getDeviceTypeString(type: Int): String {
+    return when (type) {
+      AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "BUILTIN_SPEAKER"
+      AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "BUILTIN_EARPIECE"
+      AudioDeviceInfo.TYPE_WIRED_HEADSET -> "WIRED_HEADSET"
+      AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "WIRED_HEADPHONES"
+      AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "BLUETOOTH_SCO"
+      AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "BLUETOOTH_A2DP"
+      AudioDeviceInfo.TYPE_USB_DEVICE -> "USB_DEVICE"
+      AudioDeviceInfo.TYPE_USB_HEADSET -> "USB_HEADSET"
+      AudioDeviceInfo.TYPE_USB_ACCESSORY -> "USB_ACCESSORY"
+      else -> "UNKNOWN($type)"
+    }
   }
 
   private fun getCurrentDeviceInternal(): AudioDeviceData? {
@@ -295,6 +367,8 @@ internal object SpeakerModeManager {
         else -> "unknown"
       }
 
+      Log.d(TAG, "getCurrentDevice: id=${currentDevice.id}, type=${getDeviceTypeString(currentDevice.type)}, product=${currentDevice.productName}")
+
       return AudioDeviceData(
         id = currentDevice.id.toString(),
         type = deviceType
@@ -302,6 +376,7 @@ internal object SpeakerModeManager {
     }
 
     // Fallback: No communication device set (means default receiver/earpiece)
+    Log.d(TAG, "getCurrentDevice: null (fallback to receiver)")
     return AudioDeviceData(
       id = "builtin_receiver",
       type = "builtinReceiver"
