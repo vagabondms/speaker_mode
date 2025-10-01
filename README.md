@@ -7,7 +7,7 @@ Flutter 플러그인으로 iOS 및 Android에서 오디오 출력 장치를 제�
 이 플러그인은 VoIP 통화 애플리케이션에서 **오디오 출력 장치를 동적으로 제어**하기 위해 설계되었습니다:
 
 - **네이티브 오디오 라우팅 UI**: iOS는 시스템 AVRoutePickerView, Android는 Material Design 3 Dialog 제공
-- **멀티 디바이스 지원**: 내장 스피커, 리시버, 블루투스, 유선 헤드셋, USB 오디오, 차량 오디오 등
+- **멀티 디바이스 지원**: 내장 스피커, 리시버, 블루투스, 유선 헤드셋, 차량 오디오(iOS), AirPlay(iOS) 등
 - **실시간 디바이스 감지**: 오디오 기기 연결/해제를 실시간으로 감지하고 상태 스트림으로 제공
 
 ## 기능
@@ -37,6 +37,7 @@ Flutter 플러그인으로 iOS 및 Android에서 오디오 출력 장치를 제�
 - **Material Design 3 Dialog**
 - AudioManager 기반 디바이스 관리
 - 실시간 디바이스 목록 업데이트
+- **통화용 디바이스만 필터링**: A2DP(음악 전용), USB_DEVICE/ACCESSORY(일반 USB) 자동 제외
 
 ## 중요: 사용 제한 사항
 
@@ -228,9 +229,16 @@ enum AudioSourceType {
 | `builtinReceiver` | 내장 리시버 (통화용) | ✅  | ✅      |
 | `bluetooth`       | 블루투스 오디오      | ✅  | ✅      |
 | `wiredHeadset`    | 유선 헤드셋/이어폰   | ✅  | ✅      |
-| `usb`             | USB 오디오 디바이스  | ✅  | ✅      |
+| `usb`             | USB 헤드셋 (통화용)  | ✅  | ⚠️      |
 | `carAudio`        | 차량 오디오          | ✅  | ❌      |
 | `airplay`         | AirPlay 디바이스     | ✅  | ❌      |
+
+> **⚠️ Android USB 제한 사항**:
+> - **통화용 필터링**: `TYPE_USB_HEADSET`만 표시되며, `TYPE_USB_DEVICE`/`TYPE_USB_ACCESSORY`는 자동 제외됩니다.
+> - USB 헤드셋도 하드웨어/드라이버/OEM 정책에 따라 **VoIP 통화에서 작동하지 않을 수 있습니다**.
+> - 일부 Android 기기(특히 Samsung)에서는 `USAGE_VOICE_COMMUNICATION`과 함께 USB를 명시적으로 선택할 수 없습니다.
+> - USB 헤드셋 선택 시도 시 실패하면 에러 이벤트가 전달됩니다.
+> - **권장**: USB 통화 지원 여부는 실제 테스트를 통해 확인하세요.
 
 ## 플랫폼별 구현 세부 사항
 
@@ -244,10 +252,16 @@ enum AudioSourceType {
 ### Android
 
 - **Material UI**: Material Design 3 Dialog로 디바이스 선택
-- **오디오 제어**: `AudioManager` 기반 수동 라우팅
-- **디바이스 목록**: `AudioManager.getDevices(GET_DEVICES_OUTPUTS)`로 실시간 조회
+- **오디오 제어**: `AudioManager.setCommunicationDevice()` 기반 라우팅 (API 29+)
+- **오디오 모드**: `MODE_IN_COMMUNICATION` (VoIP 통화 최적화)
+- **디바이스 목록**: `AudioManager.availableCommunicationDevices`로 실시간 조회
 - **실시간 감지**: `AudioDeviceCallback`으로 디바이스 연결/해제 감지
-- **지원 디바이스**: 내장 스피커/리시버, 블루투스, 유선 헤드셋, USB
+- **통화용 필터링**: `BLUETOOTH_SCO`, `USB_HEADSET`만 표시 (`A2DP`, `USB_DEVICE` 제외)
+- **지원 디바이스**: 내장 스피커/리시버, 블루투스 SCO, 유선 헤드셋, USB 헤드셋 (제한적)
+- **디바이스 전환 검증**:
+  - 디바이스 전환 시도 후 100ms 대기하여 실제 변경 여부 확인
+  - 실패 시 EventChannel을 통해 에러 이벤트 전송
+  - USB 디바이스는 특별한 에러 메시지 제공
 
 ## 주의 사항
 
@@ -255,6 +269,12 @@ enum AudioSourceType {
 2. **Context 필요**: `showAudioRoutePicker()`는 BuildContext가 필요합니다.
 3. **iOS 제한**: iOS는 시스템이 자동으로 audio routing을 관리하므로 일부 디바이스 전환이 제한될 수 있습니다.
 4. **Android 블루투스**: 일부 블루투스 디바이스는 시스템이 자동 제어하므로 수동 전환이 제한될 수 있습니다.
+5. **Android USB 제한**:
+   - `TYPE_USB_HEADSET`만 표시되며 일반 USB 장치(`USB_DEVICE`/`USB_ACCESSORY`)는 자동 필터링됩니다.
+   - USB 헤드셋도 하드웨어/드라이버 제약으로 VoIP 통화가 불가능할 수 있습니다.
+   - USB 헤드셋 선택 실패 시 에러 이벤트가 전달되므로 앱에서 적절히 처리해야 합니다.
+   - 유선 헤드셋(3.5mm)은 정상적으로 수동 제어 가능합니다.
+6. **자동 전환 없음**: 디바이스 연결 시 자동 전환되지 않습니다. 사용자가 직접 오디오 디바이스 선택 UI에서 선택해야 합니다.
 
 ## 예제
 

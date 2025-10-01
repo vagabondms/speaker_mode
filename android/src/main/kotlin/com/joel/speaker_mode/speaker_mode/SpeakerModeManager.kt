@@ -54,33 +54,7 @@ internal object SpeakerModeManager {
         val typeString = getDeviceTypeString(device.type)
         Log.d(TAG, "  Added: id=${device.id}, type=${device.type}($typeString), product=${device.productName}")
       }
-
-      // Auto-switch to newly connected wired/USB devices
-      synchronized(lock) {
-        if (!initialized) {
-          Log.w(TAG, "onAudioDevicesAdded: not initialized, skipping auto-switch")
-          return
-        }
-
-        for (device in addedDevices) {
-          // Only auto-switch for wired and USB devices (not Bluetooth)
-          when (device.type) {
-            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
-            AudioDeviceInfo.TYPE_WIRED_HEADSET,
-            AudioDeviceInfo.TYPE_USB_HEADSET,
-            AudioDeviceInfo.TYPE_USB_DEVICE -> {
-              // Auto-switch to this device
-              Log.d(TAG, "Auto-switching to device: id=${device.id}, type=${getDeviceTypeString(device.type)}")
-              // Clear first to avoid conflicts with telephony apps (Samsung issue)
-              audioManager.clearCommunicationDevice()
-              Thread.sleep(50)
-              val success = audioManager.setCommunicationDevice(device)
-              Log.d(TAG, "Auto-switch result: $success")
-              break  // Switch to first wired/USB device found
-            }
-          }
-        }
-      }
+      // Notify Flutter that available devices changed (no auto-switch)
       notifyAudioStateChanged()
     }
 
@@ -125,7 +99,7 @@ internal object SpeakerModeManager {
         audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
         // Set audio mode to MODE_IN_COMMUNICATION for VoIP calls
-        // This is required for setCommunicationDevice() to work properly
+        // This enables echo cancellation and noise suppression
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
 
         registerReceivers()
@@ -169,7 +143,6 @@ internal object SpeakerModeManager {
 
   fun setAudioDevice(deviceId: String) {
     Log.d(TAG, "setAudioDevice() called with deviceId: $deviceId")
-    Log.d(TAG, "Current audio mode: ${audioManager.mode} (0=NORMAL, 1=RINGTONE, 2=IN_CALL, 3=IN_COMMUNICATION)")
 
     synchronized(lock) {
       if (!initialized) {
@@ -208,11 +181,38 @@ internal object SpeakerModeManager {
           if (targetDevice != null) {
             val typeString = getDeviceTypeString(targetDevice.type)
             Log.d(TAG, "Found target device: type=${targetDevice.type}($typeString), product=${targetDevice.productName}")
-            // Clear first to avoid conflicts with telephony apps (Samsung issue)
+
+            // Clear first to avoid conflicts with telephony apps
             audioManager.clearCommunicationDevice()
             Thread.sleep(50)
+
             val success = audioManager.setCommunicationDevice(targetDevice)
             Log.d(TAG, "setCommunicationDevice(target) result: $success")
+
+            // Verify device actually changed (wait 100ms for system to switch)
+            Thread.sleep(100)
+            val actualDevice = audioManager.communicationDevice
+
+            if (actualDevice?.id != targetDevice.id) {
+              // Device switch failed!
+              Log.e(TAG, "Device switch verification FAILED!")
+              Log.e(TAG, "  Requested: id=${targetDevice.id}, type=$typeString")
+              Log.e(TAG, "  Actual: id=${actualDevice?.id}, type=${actualDevice?.let { getDeviceTypeString(it.type) } ?: "null"}")
+
+              // USB 헤드셋은 하드웨어/드라이버에 따라 작동하지 않을 수 있음
+              val isUsbDevice = targetDevice.type == AudioDeviceInfo.TYPE_USB_HEADSET
+
+              val errorMessage = if (isUsbDevice) {
+                "이 USB 장치는 통화에 사용할 수 없습니다"
+              } else {
+                "이 오디오 디바이스로 전환할 수 없습니다"
+              }
+
+              sendErrorEvent(errorMessage)
+            } else {
+              Log.d(TAG, "Device switch verification SUCCESS")
+            }
+
             if (!success) {
               Log.e(TAG, "Failed to set communication device! Current available devices:")
               availableDevices.forEach { device ->
@@ -274,6 +274,23 @@ internal object SpeakerModeManager {
     }
   }
 
+  private fun sendErrorEvent(message: String) {
+    if (!initialized) return
+    mainHandler.post {
+      val sinks = synchronized(lock) {
+        eventSinks.toList()
+      }
+
+      sinks.forEach { sink ->
+        try {
+          sink.error("AUDIO_ROUTING_ERROR", message, null)
+        } catch (_: Exception) {
+          removeListener(sink)
+        }
+      }
+    }
+  }
+
   private fun dispatchAudioState(targetSink: EventChannel.EventSink?) {
     val result = synchronized(lock) {
       if (!initialized) {
@@ -325,12 +342,17 @@ internal object SpeakerModeManager {
       val deviceType = when (device.type) {
         AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "builtinSpeaker"
         AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "builtinReceiver"
-        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
         AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "bluetooth"
         AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
         AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wiredHeadset"
-        AudioDeviceInfo.TYPE_USB_HEADSET,
-        AudioDeviceInfo.TYPE_USB_DEVICE -> "usb"
+        AudioDeviceInfo.TYPE_USB_HEADSET -> "usb"
+        // Filter out non-call devices
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_USB_DEVICE,
+        AudioDeviceInfo.TYPE_USB_ACCESSORY -> {
+          Log.d(TAG, "  Skipping non-call device: ${device.type}($typeString)")
+          continue
+        }
         else -> {
           Log.w(TAG, "  Skipping unsupported device type: ${device.type}($typeString)")
           continue
@@ -364,16 +386,21 @@ internal object SpeakerModeManager {
     val currentDevice = audioManager.communicationDevice
 
     if (currentDevice != null) {
-      // Map AudioDeviceInfo type to our type string
+      // Map AudioDeviceInfo type to our type string (filter non-call devices)
       val deviceType = when (currentDevice.type) {
         AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "builtinSpeaker"
         AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "builtinReceiver"
-        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
         AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "bluetooth"
         AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
         AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wiredHeadset"
-        AudioDeviceInfo.TYPE_USB_HEADSET,
-        AudioDeviceInfo.TYPE_USB_DEVICE -> "usb"
+        AudioDeviceInfo.TYPE_USB_HEADSET -> "usb"
+        // Non-call devices should fallback to receiver
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_USB_DEVICE,
+        AudioDeviceInfo.TYPE_USB_ACCESSORY -> {
+          Log.w(TAG, "getCurrentDevice: ignoring non-call device ${getDeviceTypeString(currentDevice.type)}, fallback to receiver")
+          return AudioDeviceData(id = "builtin_receiver", type = "builtinReceiver")
+        }
         else -> "unknown"
       }
 
