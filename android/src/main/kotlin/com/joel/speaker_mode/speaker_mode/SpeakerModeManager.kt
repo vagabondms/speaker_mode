@@ -345,9 +345,9 @@ internal object SpeakerModeManager {
         AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "bluetooth"
         AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
         AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wiredHeadset"
-        AudioDeviceInfo.TYPE_USB_HEADSET -> "usb"
         // Filter out non-call devices
         AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_USB_HEADSET,
         AudioDeviceInfo.TYPE_USB_DEVICE,
         AudioDeviceInfo.TYPE_USB_ACCESSORY -> {
           Log.d(TAG, "  Skipping non-call device: ${device.type}($typeString)")
@@ -392,9 +392,9 @@ internal object SpeakerModeManager {
         AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "builtinReceiver"
         AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "bluetooth"
         AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
-        AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wiredHeadset"
-        AudioDeviceInfo.TYPE_USB_HEADSET -> "usb"
+        AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wiredHeadset"         
         // Non-call devices should fallback to receiver
+        AudioDeviceInfo.TYPE_USB_HEADSET,
         AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
         AudioDeviceInfo.TYPE_USB_DEVICE,
         AudioDeviceInfo.TYPE_USB_ACCESSORY -> {

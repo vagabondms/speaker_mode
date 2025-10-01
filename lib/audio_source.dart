@@ -14,9 +14,6 @@ enum AudioSourceType {
   /// 유선 헤드셋/이어폰
   wiredHeadset,
 
-  /// USB 오디오 디바이스
-  usb,
-
   /// 차량 오디오
   carAudio,
 
@@ -37,8 +34,6 @@ enum AudioSourceType {
         return AudioSourceType.bluetooth;
       case 'wiredHeadset':
         return AudioSourceType.wiredHeadset;
-      case 'usb':
-        return AudioSourceType.usb;
       case 'carAudio':
         return AudioSourceType.carAudio;
       case 'airplay':
@@ -59,8 +54,6 @@ enum AudioSourceType {
         return 'bluetooth';
       case AudioSourceType.wiredHeadset:
         return 'wiredHeadset';
-      case AudioSourceType.usb:
-        return 'usb';
       case AudioSourceType.carAudio:
         return 'carAudio';
       case AudioSourceType.airplay:
@@ -104,9 +97,7 @@ class AudioDevice {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is AudioDevice &&
-        other.id == id &&
-        other.type == type;
+    return other is AudioDevice && other.id == id && other.type == type;
   }
 
   @override

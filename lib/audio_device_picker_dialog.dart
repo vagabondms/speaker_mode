@@ -62,8 +62,6 @@ class AudioDevicePickerDialog extends StatelessWidget {
         return Icons.bluetooth_audio;
       case AudioSourceType.wiredHeadset:
         return Icons.headset;
-      case AudioSourceType.usb:
-        return Icons.usb;
       case AudioSourceType.carAudio:
         return Icons.directions_car;
       case AudioSourceType.airplay:
@@ -81,7 +79,6 @@ class AudioDevicePickerDialog extends StatelessWidget {
         return '휴대폰';
       case AudioSourceType.bluetooth:
         return 'Bluetooth';
-      case AudioSourceType.usb:
       case AudioSourceType.wiredHeadset:
         return '이어폰';
       case AudioSourceType.carAudio:
