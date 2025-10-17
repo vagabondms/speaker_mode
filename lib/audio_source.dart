@@ -1,29 +1,29 @@
 import 'package:flutter/foundation.dart';
 
-/// 오디오 출력 소스 타입
+/// Audio output source type
 enum AudioSourceType {
-  /// 내장 스피커
+  /// Built-in speaker
   builtinSpeaker,
 
-  /// 내장 리시버 (귀에 대는 스피커)
+  /// Built-in receiver (earpiece speaker)
   builtinReceiver,
 
-  /// 블루투스 디바이스
+  /// Bluetooth device
   bluetooth,
 
-  /// 유선 헤드셋/이어폰
+  /// Wired headset/earphones
   wiredHeadset,
 
-  /// 차량 오디오
+  /// Car audio
   carAudio,
 
-  /// AirPlay 디바이스
+  /// AirPlay device
   airplay,
 
-  /// 알 수 없는 타입
+  /// Unknown type
   unknown;
 
-  /// 문자열에서 AudioSourceType으로 변환
+  /// Convert from string to AudioSourceType
   static AudioSourceType fromString(String value) {
     switch (value) {
       case 'builtinSpeaker':
@@ -43,7 +43,7 @@ enum AudioSourceType {
     }
   }
 
-  /// AudioSourceType을 문자열로 변환
+  /// Convert AudioSourceType to string
   String toJsonString() {
     switch (this) {
       case AudioSourceType.builtinSpeaker:
@@ -64,13 +64,13 @@ enum AudioSourceType {
   }
 }
 
-/// 오디오 디바이스 정보
+/// Audio device information
 @immutable
 class AudioDevice {
-  /// 디바이스 고유 ID
+  /// Unique device ID
   final String id;
 
-  /// 디바이스 타입
+  /// Device type
   final AudioSourceType type;
 
   const AudioDevice({
@@ -78,7 +78,7 @@ class AudioDevice {
     required this.type,
   });
 
-  /// JSON Map에서 AudioDevice 생성
+  /// Create AudioDevice from JSON Map
   factory AudioDevice.fromMap(Map<dynamic, dynamic> map) {
     return AudioDevice(
       id: map['id'] as String? ?? '',
@@ -86,7 +86,7 @@ class AudioDevice {
     );
   }
 
-  /// AudioDevice를 JSON Map으로 변환
+  /// Convert AudioDevice to JSON Map
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -106,7 +106,7 @@ class AudioDevice {
   @override
   String toString() => 'AudioDevice(id: $id, type: $type)';
 
-  /// AudioDevice 복사본 생성
+  /// Create a copy of AudioDevice
   AudioDevice copyWith({
     String? id,
     AudioSourceType? type,

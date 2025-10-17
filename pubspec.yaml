@@ -1,6 +1,6 @@
-name: speaker_mode
-description: "A new Flutter project."
-version: 0.0.1
+name: audio_router
+description: "Flutter plugin for managing audio output routing in VoIP and communication apps. Provides native UI for switching between speaker, receiver, Bluetooth, wired headsets, and other audio devices."
+version: 1.0.0
 homepage:
 
 environment:
@@ -35,10 +35,10 @@ flutter:
   plugin:
     platforms:
       android:
-        package: com.joel.speaker_mode.speaker_mode
-        pluginClass: SpeakerModePlugin
+        package: com.joel.audio_router
+        pluginClass: AudioRouterPlugin
       ios:
-        pluginClass: SpeakerModePlugin
+        pluginClass: AudioRouterPlugin
 
   # To add assets to your plugin package, add an assets section, like this:
   # assets:

@@ -3,6 +3,22 @@ import UIKit
 import AVFoundation
 import AVKit
 
+/// Audio Router Plugin for iOS
+///
+/// This plugin provides audio output routing control for VoIP and communication apps.
+/// **Important**: This plugin does NOT configure AVAudioSession. The host app is responsible
+/// for setting up the audio session (category, mode, options) before using this plugin.
+///
+/// Responsibilities:
+/// - Monitoring current audio route via AVAudioSession.currentRoute
+/// - Displaying native AVRoutePickerView for device selection
+/// - Notifying Flutter side of route changes
+///
+/// Not responsible for:
+/// - AVAudioSession category/mode setup
+/// - Audio session activation
+/// - Recording device selection
+
 private struct AudioDeviceInfo {
   let id: String
   let type: String
@@ -15,8 +31,8 @@ private struct AudioDeviceInfo {
   }
 }
 
-private final class SpeakerModeController: NSObject {
-  static let shared = SpeakerModeController()
+private final class AudioRouterController: NSObject {
+  static let shared = AudioRouterController()
 
   private var sinks: [UUID: FlutterEventSink] = [:]
   private var pluginCount: Int = 0
@@ -54,6 +70,8 @@ private final class SpeakerModeController: NSObject {
   }
 
 
+  /// Sets up observers for audio route changes.
+  /// Monitors AVAudioSession.routeChangeNotification to detect device changes.
   private func setupObservers() {
     NotificationCenter.default.addObserver(
       self,
@@ -67,6 +85,9 @@ private final class SpeakerModeController: NSObject {
     NotificationCenter.default.removeObserver(self)
   }
 
+  /// Shows the native iOS audio route picker (AVRoutePickerView).
+  /// This allows the user to select between available audio output devices
+  /// within the current audio session configured by the host app.
   func showAudioRoutePicker() {
     DispatchQueue.main.async {
       let routePickerView = AVRoutePickerView(frame: CGRect.zero)
@@ -194,11 +215,11 @@ private final class SpeakerModeController: NSObject {
 
 }
 
-public class SpeakerModePlugin: NSObject, FlutterPlugin {
-  private let controller: SpeakerModeController
+public class AudioRouterPlugin: NSObject, FlutterPlugin {
+  private let controller: AudioRouterController
   private var sinkHandle: UUID?
 
-  fileprivate init(controller: SpeakerModeController) {
+  fileprivate init(controller: AudioRouterController) {
     self.controller = controller
     super.init()
     controller.acquire()
@@ -214,10 +235,10 @@ public class SpeakerModePlugin: NSObject, FlutterPlugin {
   }
 
   public static func register(with registrar: FlutterPluginRegistrar) {
-    let methodChannel = FlutterMethodChannel(name: "speaker_mode", binaryMessenger: registrar.messenger())
-    let eventChannel = FlutterEventChannel(name: "speaker_mode/events", binaryMessenger: registrar.messenger())
+    let methodChannel = FlutterMethodChannel(name: "audio_router", binaryMessenger: registrar.messenger())
+    let eventChannel = FlutterEventChannel(name: "audio_router/events", binaryMessenger: registrar.messenger())
 
-    let instance = SpeakerModePlugin()
+    let instance = AudioRouterPlugin()
     registrar.addMethodCallDelegate(instance, channel: methodChannel)
     eventChannel.setStreamHandler(instance)
   }
@@ -233,7 +254,7 @@ public class SpeakerModePlugin: NSObject, FlutterPlugin {
   }
 }
 
-extension SpeakerModePlugin: FlutterStreamHandler {
+extension AudioRouterPlugin: FlutterStreamHandler {
   public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
     sinkHandle = controller.addSink(events)
     return nil

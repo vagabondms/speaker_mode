@@ -3,24 +3,24 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'audio_router.dart';
+import 'audio_router_platform_interface.dart';
 import 'audio_source.dart';
-import 'speaker_mode.dart';
-import 'speaker_mode_platform_interface.dart';
 
-/// An implementation of [SpeakerModePlatform] that uses method channels.
-class MethodChannelSpeakerMode extends SpeakerModePlatform {
+/// An implementation of [AudioRouterPlatform] that uses method channels.
+class MethodChannelAudioRouter extends AudioRouterPlatform {
   /// The method channel used to interact with the native platform.
   @visibleForTesting
-  final methodChannel = const MethodChannel('speaker_mode');
+  final methodChannel = const MethodChannel('audio_router');
 
   /// The event channel used to receive audio state changes from the native platform.
   @visibleForTesting
-  final eventChannel = const EventChannel('speaker_mode/events');
+  final eventChannel = const EventChannel('audio_router/events');
 
   late final Stream<AudioState> _audioStateStream;
 
   /// Constructor
-  MethodChannelSpeakerMode() {
+  MethodChannelAudioRouter() {
     _audioStateStream = eventChannel
         .receiveBroadcastStream()
         .map(_toAudioState)
@@ -64,7 +64,7 @@ class MethodChannelSpeakerMode extends SpeakerModePlatform {
   }
 
   void _onError(Object error) {
-    debugPrint('오디오 상태 스트림 에러: $error');
+    debugPrint('Audio state stream error: $error');
   }
 
   @override
@@ -73,9 +73,14 @@ class MethodChannelSpeakerMode extends SpeakerModePlatform {
   }
 
   @override
-  Future<List<AudioDevice>> getAvailableDevices() async {
+  Future<List<AudioDevice>> getAvailableDevices({
+    AndroidAudioOptions androidAudioOptions = const AndroidAudioOptions(),
+  }) async {
     try {
-      final result = await methodChannel.invokeMethod<List>('getAvailableDevices');
+      final result = await methodChannel.invokeMethod<List>(
+        'getAvailableDevices',
+        androidAudioOptions.toMap(),
+      );
       if (result == null) return [];
 
       return result

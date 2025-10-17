@@ -1,4 +1,4 @@
-package com.joel.speaker_mode.speaker_mode
+package com.joel.audio_router
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -12,6 +12,25 @@ import android.os.Looper
 import android.util.Log
 import io.flutter.plugin.common.EventChannel
 
+/**
+ * Audio Router Manager for Android
+ *
+ * Manages audio output routing for VoIP and communication apps.
+ * **Important**: This manager does NOT set AudioManager mode. The host app is responsible
+ * for configuring the audio mode (e.g., MODE_IN_COMMUNICATION) before using this plugin.
+ *
+ * Responsibilities:
+ * - Managing communication device routing via AudioManager.setCommunicationDevice()
+ * - Monitoring device connection/disconnection events
+ * - Filtering to show only communication-capable devices
+ * - Verifying device switch success
+ *
+ * Not responsible for:
+ * - Setting AudioManager mode (MODE_IN_COMMUNICATION, MODE_IN_CALL, etc.)
+ * - Audio focus management
+ * - Recording device selection
+ */
+
 internal data class AudioDeviceData(
   val id: String,
   val type: String
@@ -24,8 +43,8 @@ internal data class AudioDeviceData(
   }
 }
 
-internal object SpeakerModeManager {
-  private const val TAG = "SpeakerModeManager"
+internal object AudioRouterManager {
+  private const val TAG = "AudioRouterManager"
   private val lock = Any()
   private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -98,9 +117,9 @@ internal object SpeakerModeManager {
         appContext = context.applicationContext
         audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-        // Set audio mode to MODE_IN_COMMUNICATION for VoIP calls
-        // This enables echo cancellation and noise suppression
-        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        // Note: This plugin does NOT manage audio session mode.
+        // The host app is responsible for setting the appropriate audio mode
+        // (e.g., MODE_IN_COMMUNICATION for VoIP calls) before using this plugin.
 
         registerReceivers()
         initialized = true
@@ -123,13 +142,13 @@ internal object SpeakerModeManager {
     }
   }
 
-  fun getAvailableDevices(): List<AudioDeviceData> {
+  fun getAvailableDevices(filter: String = "communication"): List<AudioDeviceData> {
     synchronized(lock) {
       if (!initialized) {
         return emptyList()
       }
     }
-    return getAvailableDevicesInternal()
+    return getAvailableDevicesInternal(filter)
   }
 
   fun getCurrentDevice(): AudioDeviceData? {
@@ -199,13 +218,13 @@ internal object SpeakerModeManager {
               Log.e(TAG, "  Requested: id=${targetDevice.id}, type=$typeString")
               Log.e(TAG, "  Actual: id=${actualDevice?.id}, type=${actualDevice?.let { getDeviceTypeString(it.type) } ?: "null"}")
 
-              // USB 헤드셋은 하드웨어/드라이버에 따라 작동하지 않을 수 있음
+              // USB headsets may not work depending on hardware/driver
               val isUsbDevice = targetDevice.type == AudioDeviceInfo.TYPE_USB_HEADSET
 
               val errorMessage = if (isUsbDevice) {
-                "이 USB 장치는 통화에 사용할 수 없습니다"
+                "This USB device cannot be used for calls"
               } else {
-                "이 오디오 디바이스로 전환할 수 없습니다"
+                "Cannot switch to this audio device"
               }
 
               sendErrorEvent(errorMessage)
@@ -328,13 +347,28 @@ internal object SpeakerModeManager {
     }
   }
 
-  private fun getAvailableDevicesInternal(): List<AudioDeviceData> {
+  private fun getAvailableDevicesInternal(filter: String): List<AudioDeviceData> {
     val devices = mutableListOf<AudioDeviceData>()
 
-    // API 29+: Use getAvailableCommunicationDevices() for accurate list
-    val availableDevices = audioManager.availableCommunicationDevices
+    // Choose device source based on filter
+    val availableDevices = when (filter) {
+      "communication" -> {
+        // Use communication devices only (SCO Bluetooth, USB Headset)
+        Log.d(TAG, "=== Using availableCommunicationDevices (filter=$filter) ===")
+        audioManager.availableCommunicationDevices
+      }
+      "media", "all" -> {
+        // Use all output devices (includes A2DP Bluetooth, all USB)
+        Log.d(TAG, "=== Using all output devices (filter=$filter) ===")
+        audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).toList()
+      }
+      else -> {
+        Log.w(TAG, "Unknown filter: $filter, defaulting to communication")
+        audioManager.availableCommunicationDevices
+      }
+    }
 
-    Log.d(TAG, "=== Available Communication Devices (${availableDevices.size}) ===")
+    Log.d(TAG, "=== Available Devices (${availableDevices.size}, filter=$filter) ===")
     for (device in availableDevices) {
       val typeString = getDeviceTypeString(device.type)
       Log.d(TAG, "  Device: id=${device.id}, type=${device.type}($typeString), product=${device.productName}")
@@ -343,15 +377,25 @@ internal object SpeakerModeManager {
         AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "builtinSpeaker"
         AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "builtinReceiver"
         AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "bluetooth"
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> {
+          // Only include A2DP for media/all filters
+          if (filter == "communication") {
+            Log.d(TAG, "  Skipping A2DP in communication mode")
+            continue
+          }
+          "bluetooth"  // Map A2DP to generic bluetooth type
+        }
         AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
         AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wiredHeadset"
-        // Filter out non-call devices
-        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
         AudioDeviceInfo.TYPE_USB_HEADSET,
         AudioDeviceInfo.TYPE_USB_DEVICE,
         AudioDeviceInfo.TYPE_USB_ACCESSORY -> {
-          Log.d(TAG, "  Skipping non-call device: ${device.type}($typeString)")
-          continue
+          // Only include USB for media/all filters
+          if (filter == "communication") {
+            Log.d(TAG, "  Skipping USB device in communication mode")
+            continue
+          }
+          "usb"  // Map USB devices to usb type
         }
         else -> {
           Log.w(TAG, "  Skipping unsupported device type: ${device.type}($typeString)")

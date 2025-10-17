@@ -1,4 +1,4 @@
-package com.joel.speaker_mode.speaker_mode
+package com.joel.audio_router
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
@@ -7,43 +7,44 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 
-/** SpeakerModePlugin */
-class SpeakerModePlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamHandler {
+/** AudioRouterPlugin */
+class AudioRouterPlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamHandler {
   private lateinit var methodChannel: MethodChannel
   private lateinit var eventChannel: EventChannel
   private var eventSink: EventChannel.EventSink? = null
 
   override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-    methodChannel = MethodChannel(binding.binaryMessenger, "speaker_mode")
-    eventChannel = EventChannel(binding.binaryMessenger, "speaker_mode/events")
+    methodChannel = MethodChannel(binding.binaryMessenger, "audio_router")
+    eventChannel = EventChannel(binding.binaryMessenger, "audio_router/events")
 
     methodChannel.setMethodCallHandler(this)
     eventChannel.setStreamHandler(this)
 
-    SpeakerModeManager.acquire(binding.applicationContext)
+    AudioRouterManager.acquire(binding.applicationContext)
   }
 
   override fun onMethodCall(call: MethodCall, result: Result) {
     when (call.method) {
       "showAudioRoutePicker" -> {
-        // Flutter에서 dialog 처리
+        // Dialog handled in Flutter
         result.success(null)
       }
       "getAvailableDevices" -> {
-        val devices = SpeakerModeManager.getAvailableDevices()
+        val filterName = call.argument<String>("filter") ?: "communication"
+        val devices = AudioRouterManager.getAvailableDevices(filterName)
         result.success(devices.map { it.toMap() })
       }
       "setAudioDevice" -> {
         val deviceId = call.argument<String>("deviceId")
         if (deviceId != null) {
-          SpeakerModeManager.setAudioDevice(deviceId)
+          AudioRouterManager.setAudioDevice(deviceId)
           result.success(null)
         } else {
           result.error("INVALID_ARGUMENTS", "deviceId is required", null)
         }
       }
       "getCurrentDevice" -> {
-        val device = SpeakerModeManager.getCurrentDevice()
+        val device = AudioRouterManager.getCurrentDevice()
         result.success(device?.toMap())
       }
       else -> result.notImplemented()
@@ -52,11 +53,11 @@ class SpeakerModePlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamH
 
   override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
     eventSink = events
-    events?.let { SpeakerModeManager.addListener(it) }
+    events?.let { AudioRouterManager.addListener(it) }
   }
 
   override fun onCancel(arguments: Any?) {
-    SpeakerModeManager.removeListener(eventSink)
+    AudioRouterManager.removeListener(eventSink)
     eventSink = null
   }
 
@@ -64,9 +65,9 @@ class SpeakerModePlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamH
     methodChannel.setMethodCallHandler(null)
     eventChannel.setStreamHandler(null)
 
-    SpeakerModeManager.removeListener(eventSink)
+    AudioRouterManager.removeListener(eventSink)
     eventSink = null
 
-    SpeakerModeManager.release()
+    AudioRouterManager.release()
   }
 }
